@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Contracts - no need to deploy
+packages/contracts/artifacts
+packages/contracts/cache
+packages/contracts/typechain-types
+
+# Relayer - separate service
+packages/relayer
+
+# Tests
+packages/contracts/test
+test
+
+# Build artifacts (except frontend dist)
+packages/contracts/dist
+packages/relayer/dist
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore

@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build --workspace=packages/frontend",
-  "devCommand": "npm run dev --workspace=packages/frontend",
+  "buildCommand": "npm -w packages/frontend run build",
+  "devCommand": "npm -w packages/frontend run dev",
   "installCommand": "npm install",
   "framework": "vite",
   "outputDirectory": "packages/frontend/dist",

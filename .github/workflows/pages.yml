@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies (workspaces)
         run: npm install
 
-      - name: Build frontend
-        run: npm -w packages/frontend run build
+      - name: Build frontend (Pages base path)
+        run: VITE_BASE=/BTCD.P/ npm -w packages/frontend run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

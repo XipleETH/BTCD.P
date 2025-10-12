@@ -1,0 +1,36 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+dist/
+build/
+.parcel-cache/
+.turbo/
+.pnpm-store/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env/secrets
+.env
+**/.env
+.env.*
+!.env.example
+packages/contracts/.env
+packages/contracts/.env.copilot
+
+# Hardhat/Typechain
+packages/contracts/artifacts/
+packages/contracts/cache/
+packages/contracts/typechain-types/
+
+# Coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log

@@ -1,0 +1,11 @@
+{
+  "name": "btcd-perps",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm -w packages/contracts run build && npm -w packages/frontend run build",
+    "test": "npm -w packages/contracts run test",
+    "dev": "powershell -NoProfile -Command \"Start-Process powershell -ArgumentList '-NoProfile','-Command','cd packages/contracts; npx hardhat run scripts/coingecko-daemon.ts --network baseSepolia' ; cd packages/frontend; npm run dev\""
+  }
+}

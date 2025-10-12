@@ -4,6 +4,7 @@ import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
+import './styles.css'
 import { deployed } from './addresses'
 
 // Oracle event ABI for on-chain history and live updates
@@ -153,13 +154,17 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   }, [ticks, tf])
 
   return (
-    <div>
-      <div style={{ display:'flex', gap:8, marginBottom: 8 }}>
-        {(['5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
-          <button key={k} onClick={()=>setTf(k)} style={{ padding:'4px 8px', background: tf===k?'#334155':'#1f2937', color:'#fff', borderRadius:4 }}>{k}</button>
-        ))}
+    <div className="card">
+      <div className="card-header">
+        <div className="tabs">
+          {(['5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
+            <button key={k} onClick={()=>setTf(k)} className={tf===k? 'tab active':'tab'}>{k}</button>
+          ))}
+        </div>
       </div>
-      <div id={containerId} style={{ height: 480 }} />
+      <div className="card-body p0">
+        <div id={containerId} className="chart" />
+      </div>
     </div>
   )
 }
@@ -196,7 +201,7 @@ function AppInner() {
     }
   }), [])
 
-  // simple local state for addresses (fill after deploy)
+  // addresses from deployed mapping (read-only in UI)
   const [oracleAddress, setOracleAddress] = useState<string>('')
   const [perpsAddress, setPerpsAddress] = useState<string>('')
 
@@ -210,61 +215,41 @@ function AppInner() {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
       <RainbowKitProvider>
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
-          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>BTC Dominance Perps</h2>
-            <ConnectButton />
-          </header>
-
-          <div style={{ marginTop: 16 }}>
-            <DominanceChart oracleAddress={oracleAddress} chainKey={chain} />
-          </div>
-
-          <section style={{ marginTop: 16 }}>
-            <h3>Config</h3>
-            <div style={{ display: 'grid', gap: 8 }}>
-              <input placeholder="Oracle address" value={oracleAddress} onChange={e=>setOracleAddress(e.target.value)} />
-              <input placeholder="Perps address" value={perpsAddress} onChange={e=>setPerpsAddress(e.target.value)} />
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={()=>setChain('baseSepolia')}>Usar Base Sepolia</button>
-                <button onClick={()=>setChain('base')}>Usar Base</button>
+        <div className="container">
+          <header className="header">
+            <div className="header-left">
+              <div className="brand">BTC Dominance Perps</div>
+              <div className="network-switcher">
+                <span className="label">Network</span>
+                <div className="segmented">
+                  <button className={chain==='baseSepolia'?'seg active':'seg'} onClick={()=>setChain('baseSepolia')}>Base Sepolia</button>
+                  <button className={chain==='base'?'seg active':'seg'} onClick={()=>setChain('base')}>Base</button>
+                </div>
               </div>
               <NetworkHelper desired={chain} />
-              <ContractTreasury perpsAddress={perpsAddress} desired={chain} />
             </div>
-          </section>
+            <div className="header-right"><ConnectButton /></div>
+          </header>
 
-          <section style={{ marginTop: 16 }}>
-            <h3>Mi posición</h3>
-            <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
-          </section>
+          <main className="main">
+            <section className="main-top">
+              <DominanceChart oracleAddress={oracleAddress} chainKey={chain} />
+            </section>
 
-          <section style={{ marginTop: 16 }}>
-            <h3>Stops (SL/TP)</h3>
-            <StopsManager perpsAddress={perpsAddress} chainKey={chain} />
-          </section>
-
-          <section style={{ marginTop: 16 }}>
-            <h3>Precio BTC.D (oráculo)</h3>
-            <OraclePrice oracleAddress={oracleAddress} />
-          </section>
-
-          <section style={{ marginTop: 16 }}>
-            <h3>Abrir posición</h3>
-            <div style={{ marginBottom: 8, color:'#94a3b8' }}>Fee: 0.10% al abrir</div>
-            <OpenPosition perpsAddress={perpsAddress} chainKey={chain} />
-          </section>
-
-          <section style={{ marginTop: 16 }}>
-            <h3>Cerrar posición</h3>
-            <div style={{ marginBottom: 8, color:'#94a3b8' }}>Fee: 0.10% al cerrar</div>
-            <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} />
-          </section>
-
-          <section style={{ marginTop: 16 }}>
-            <h3>Liquidación</h3>
-            <LiquidateSelf perpsAddress={perpsAddress} chainKey={chain} />
-          </section>
+            <section className="main-grid">
+              <div className="col">
+                <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} />
+                <StopsCard perpsAddress={perpsAddress} chainKey={chain} />
+              </div>
+              <div className="col">
+                <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
+                <OracleCard oracleAddress={oracleAddress} />
+                <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
+                <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
+                <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
+              </div>
+            </section>
+          </main>
         </div>
       </RainbowKitProvider>
       </QueryClientProvider>
@@ -275,11 +260,18 @@ function AppInner() {
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
 import { parseEther, formatUnits, formatEther, createPublicClient, http as viemHttp } from 'viem'
 
-function OpenPosition({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+type OpenControlled = { isLong: boolean; setIsLong: (v:boolean)=>void; leverage: number; setLeverage: (n:number)=>void; marginEth: string; setMarginEth: (s:string)=>void }
+function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', compact?: boolean, controlled?: OpenControlled }) {
   const { address } = useAccount()
-  const [isLong, setIsLong] = useState(true)
-  const [leverage, setLeverage] = useState(10)
-  const [marginEth, setMarginEth] = useState('0.1')
+  const [isLongLocal, setIsLongLocal] = useState(true)
+  const [leverageLocal, setLeverageLocal] = useState(10)
+  const [marginEthLocal, setMarginEthLocal] = useState('0.1')
+  const isLong = controlled ? controlled.isLong : isLongLocal
+  const setIsLong = controlled ? controlled.setIsLong : setIsLongLocal
+  const leverage = controlled ? controlled.leverage : leverageLocal
+  const setLeverage = controlled ? controlled.setLeverage : setLeverageLocal
+  const marginEth = controlled ? controlled.marginEth : marginEthLocal
+  const setMarginEth = controlled ? controlled.setMarginEth : setMarginEthLocal
   const [localError, setLocalError] = useState<string>('')
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
@@ -313,17 +305,28 @@ function OpenPosition({ perpsAddress, chainKey }: { perpsAddress: string, chainK
   })
 
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={()=>setIsLong(true)} style={{ background: isLong ? '#3b82f6':'#1f2937', color: 'white', padding: 8 }}>Long</button>
-        <button onClick={()=>setIsLong(false)} style={{ background: !isLong ? '#ef4444':'#1f2937', color: 'white', padding: 8 }}>Short</button>
-      </div>
-      <label>Leverage (1-150)</label>
-      <input type="number" min={1} max={150} value={leverage} onChange={e=>setLeverage(parseInt(e.target.value||'1'))}/>
-      <label>Margin (ETH)</label>
-      <input value={marginEth} onChange={e=>setMarginEth(e.target.value)} />
-  {hasPos && <div style={{ color:'#fbbf24' }}>Ya tienes una posición abierta. Debes cerrarla antes de abrir otra.</div>}
-  <button disabled={!address || !perpsAddress || isPending || mining || hasPos} onClick={async ()=>{
+    <div className={!compact ? 'card' : ''}>
+      {!compact && (
+        <>
+          <div className="card-header"><h3>Abrir posición</h3><span className="muted">Fee: 0.10% al abrir</span></div>
+          <div className="card-body grid gap-8">
+            <div className="segmented">
+              <button className={isLong? 'seg active':'seg'} onClick={()=>setIsLong(true)}>Long</button>
+              <button className={!isLong? 'seg active':'seg'} onClick={()=>setIsLong(false)}>Short</button>
+            </div>
+            <div className="field">
+              <label>Leverage: <strong>x{leverage}</strong></label>
+              <input type="range" min={1} max={150} step={1} value={leverage} onChange={e=>setLeverage(parseInt(e.target.value||'1'))} />
+            </div>
+            <div className="field">
+              <label>Margin (ETH)</label>
+              <input className="input" value={marginEth} onChange={e=>setMarginEth(e.target.value)} />
+            </div>
+            {hasPos && <div className="warn">Ya tienes una posición abierta. Debes cerrarla antes de abrir otra.</div>}
+          </div>
+        </>
+      )}
+      <button className="btn primary w-full" disabled={!address || !perpsAddress || isPending || mining || hasPos} onClick={async ()=>{
         setLocalError('')
         const value = safeParseEther(marginEth)
         if (value === null) { setLocalError('Monto inválido (usa punto como separador decimal).'); return }
@@ -345,10 +348,10 @@ function OpenPosition({ perpsAddress, chainKey }: { perpsAddress: string, chainK
           setLocalError(e?.shortMessage || e?.message || String(e))
         }
       }}>Abrir</button>
-      {simOpen.error && <div style={{ color:'salmon' }}>Simulación falló: {String((simOpen.error as any)?.shortMessage || simOpen.error.message)}</div>}
-      {localError && <div style={{ color:'salmon' }}>{localError}</div>}
-      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
-      {(isPending || mining) && <div>Enviando transacción...</div>}
+      {simOpen.error && <div className="error">Simulación falló: {String((simOpen.error as any)?.shortMessage || simOpen.error.message)}</div>}
+      {localError && <div className="error">{localError}</div>}
+      {error && <div className="error">{String(error)}</div>}
+      {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
     </div>
   )
 }
@@ -375,12 +378,12 @@ function MyPosition({ perpsAddress, oracleAddress }: { perpsAddress: string, ora
     query: { enabled: Boolean(perpsAddress) }
   })
 
-  if (!address) return <div>Conecta tu wallet.</div>
-  if (!perpsAddress) return <div>Configura la dirección de Perps.</div>
-  if (!pos) return <div>Cargando…</div>
+  if (!address) return <div className="muted">Conecta tu wallet.</div>
+  if (!perpsAddress) return <div className="muted">Configura la dirección de Perps.</div>
+  if (!pos) return <div className="muted">Cargando…</div>
 
   const [isOpen, isLong, leverage, margin, entryPrice] = pos as [boolean, boolean, bigint, bigint, bigint]
-  if (!isOpen) return <div>No tienes una posición abierta.</div>
+  if (!isOpen) return <div className="muted">No tienes una posición abierta.</div>
 
   const price = typeof priceRaw === 'bigint' ? priceRaw : 0n
   const notional = margin * leverage
@@ -407,21 +410,24 @@ function MyPosition({ perpsAddress, oracleAddress }: { perpsAddress: string, ora
   const roi = marginEth > 0 ? (pnlEth / marginEth) * 100 : 0
 
   return (
-    <div style={{ display:'grid', gap:8 }}>
-      <div>Dirección: {address}</div>
-      <div>Estado: {isLong ? 'Long' : 'Short'} x{String(leverage)}</div>
-      <div>Precio entrada: {entryPct.toFixed(4)}%</div>
-      <div>Precio actual: {pctIndex.toFixed(4)}%</div>
-      <div>Margen: {marginEth.toFixed(6)} ETH</div>
-      <div>Notional: {notionalEth.toFixed(6)} ETH</div>
-      <div>MM Ratio: {mmRatio/100}% | Mantenimiento: {maintenanceEth.toFixed(6)} ETH</div>
-      <div style={{ color: pnlEth >= 0 ? '#10b981' : '#ef4444' }}>PnL: {pnlEth.toFixed(6)} ETH ({roi.toFixed(2)}%)</div>
-      <div>Equity: {equityEth.toFixed(6)} ETH</div>
+    <div className="stats-grid">
+      <div className="stat"><span className="stat-label">Dirección</span><span className="stat-value mono small">{address}</span></div>
+      <div className="stat"><span className="stat-label">Dirección Perps</span><span className="stat-value mono small">{perpsAddress}</span></div>
+      <div className="stat"><span className="stat-label">Lado</span><span className={isLong ? 'badge long':'badge short'}>{isLong ? 'Long' : 'Short'}</span></div>
+      <div className="stat"><span className="stat-label">Leverage</span><span className="stat-value">x{String(leverage)}</span></div>
+      <div className="stat"><span className="stat-label">Entrada</span><span className="stat-value">{entryPct.toFixed(4)}%</span></div>
+      <div className="stat"><span className="stat-label">Precio</span><span className="stat-value">{pctIndex.toFixed(4)}%</span></div>
+      <div className="stat"><span className="stat-label">Margen</span><span className="stat-value">{marginEth.toFixed(6)} ETH</span></div>
+      <div className="stat"><span className="stat-label">Notional</span><span className="stat-value">{notionalEth.toFixed(6)} ETH</span></div>
+      <div className="stat"><span className="stat-label">MM Ratio</span><span className="stat-value">{mmRatio/100}%</span></div>
+      <div className="stat"><span className="stat-label">Mantenimiento</span><span className="stat-value">{maintenanceEth.toFixed(6)} ETH</span></div>
+      <div className="stat span-2"><span className="stat-label">PnL</span><span className={pnlEth >= 0 ? 'pnl up':'pnl down'}>{pnlEth.toFixed(6)} ETH ({roi.toFixed(2)}%)</span></div>
+      <div className="stat span-2"><span className="stat-label">Equity</span><span className="stat-value">{equityEth.toFixed(6)} ETH</span></div>
     </div>
   )
 }
 
-function ClosePosition({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
+function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', minimal?: boolean }) {
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
@@ -474,10 +480,13 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey }: { perpsAddress
     query: { enabled: Boolean(perpsAddress) }
   })
   return (
-    <div>
-      {!hasPos && <div style={{ color:'#fbbf24' }}>No tienes una posición abierta para cerrar.</div>}
-      {insufficientTreasury && <div style={{ color:'#f87171' }}>El contrato no tiene saldo suficiente para pagarte el cierre estimado. Fondea en Config o espera a que el PnL sea menor.</div>}
-      <button disabled={!perpsAddress || isPending || mining || !hasPos || insufficientTreasury} onClick={async ()=>{
+    <div className={minimal ? '' : 'card'}>
+      {!minimal && (
+        <div className="card-header"><h3>Cerrar posición</h3><span className="muted">Fee: 0.10% al cerrar</span></div>
+      )}
+      {!minimal && insufficientTreasury && <div className="error">El contrato no tiene saldo suficiente para pagarte el cierre estimado. Fondea en Config o espera a que el PnL sea menor.</div>}
+      {!minimal && !hasPos && <div className="warn">No tienes una posición abierta para cerrar.</div>}
+      <button className="btn danger w-full" disabled={!perpsAddress || isPending || mining || !hasPos || insufficientTreasury} onClick={async ()=>{
         try {
           if (simClose.data?.request) {
             await writeContract(simClose.data.request as any)
@@ -493,9 +502,9 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey }: { perpsAddress
           }
         } catch {}
       }}>Cerrar</button>
-      {simClose.error && <div style={{ color:'salmon' }}>Simulación falló: {String((simClose.error as any)?.shortMessage || simClose.error.message)}</div>}
-      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
-      {(isPending || mining) && <div>Enviando transacción...</div>}
+      {simClose.error && <div className="error">Simulación falló: {String((simClose.error as any)?.shortMessage || simClose.error.message)}</div>}
+      {error && <div className="error">{String(error)}</div>}
+      {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
     </div>
   )
 }
@@ -551,17 +560,20 @@ function StopsManager({ perpsAddress, chainKey }: { perpsAddress: string, chainK
   const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
   const trigArr = (trig || []) as [boolean, boolean, boolean]
   return (
-    <div style={{ display:'grid', gap:8 }}>
-      <div>Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
-      <div style={{ display:'flex', gap:8 }}>
-        <input placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
-        <input placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
-        <button disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear Stops</button>
+    <div className="card">
+      <div className="card-header"><h3>Stops (SL / TP)</h3></div>
+      <div className="card-body grid gap-8">
+        <div className="muted">Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+        <div className="row">
+          <input className="input" placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
+          <input className="input" placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
+          <button className="btn" disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear</button>
+        </div>
+        <div className="muted">Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
+        <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
+        {error && <div className="error">{String(error)}</div>}
+        {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
       </div>
-      <div>Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
-      <button disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
-      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
-      {(isPending || mining) && <div>Enviando transacción...</div>}
     </div>
   )
 }
@@ -588,8 +600,8 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
   })
   return (
     <div>
-      <div style={{ marginBottom: 8 }}>¿Puede liquidarse? {String(canLiq)}</div>
-      <button disabled={!perpsAddress || !address || isPending || mining || !canLiq} onClick={async ()=>{
+      <div className="muted mb-8">¿Puede liquidarse? {String(canLiq)}</div>
+      <button className="btn danger w-full" disabled={!perpsAddress || !address || isPending || mining || !canLiq} onClick={async ()=>{
         try {
           if (simLiq.data?.request) {
             await writeContract(simLiq.data.request as any)
@@ -605,9 +617,9 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
           }
         } catch {}
       }}>Liquidar mi posición</button>
-      {simLiq.error && <div style={{ color:'salmon' }}>Simulación falló: {String((simLiq.error as any)?.shortMessage || simLiq.error.message)}</div>}
-      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
-      {(isPending || mining) && <div>Enviando transacción...</div>}
+      {simLiq.error && <div className="error">Simulación falló: {String((simLiq.error as any)?.shortMessage || simLiq.error.message)}</div>}
+      {error && <div className="error">{String(error)}</div>}
+      {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
     </div>
   )
 }
@@ -620,7 +632,7 @@ function OraclePrice({ oracleAddress }: { oracleAddress: string }) {
     query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
   })
   const pct = typeof data === 'bigint' ? Number(formatUnits(data, 8)) : undefined
-  return <div>BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
+  return <div className="muted">BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
 }
 
 export default function App() {
@@ -634,7 +646,7 @@ export default function App() {
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [err, setErr] = useState<Error | null>(null)
   // very small boundary to surface runtime errors
-  if (err) return <div style={{ color: 'salmon', padding: 12 }}>Error: {err.message}</div>
+  if (err) return <div className="error" style={{ padding: 12 }}>Error: {err.message}</div>
   try {
     return <>{children}</>
   } catch (e: any) {
@@ -649,11 +661,9 @@ function NetworkHelper({ desired }: { desired: 'base'|'baseSepolia' }) {
   const targetId = desired === 'baseSepolia' ? baseSepolia.id : base.id
   if (chainId === targetId) return null
   return (
-    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-      <span style={{ color:'#fbbf24' }}>Red actual: {chainId}. Recomendado: {targetId}</span>
-      <button disabled={isPending} onClick={()=>switchChainAsync?.({ chainId: targetId })}>
-        Cambiar red en wallet
-      </button>
+    <div className="inline-hint">
+      <span className="warn">Red actual: {chainId}. Recomendado: {targetId}</span>
+      <button className="btn sm" disabled={isPending} onClick={()=>switchChainAsync?.({ chainId: targetId })}>Cambiar red</button>
     </div>
   )
 }
@@ -685,14 +695,113 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
     }
   }
   return (
-    <div style={{ display:'grid', gap:8, marginTop: 8, padding: 8, background:'#0f172a', borderRadius: 8 }}>
-      <div><strong>Saldo del contrato:</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
-      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-        <input placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
-        <button disabled={!perpsAddress || isPending} onClick={onFund}>Fondear contrato (ETH)</button>
+    <div className="card">
+      <div className="card-header"><h3>Treasury</h3></div>
+      <div className="card-body grid gap-8">
+        <div><strong>Saldo:</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
+        <div className="row">
+          <input className="input" placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
+          <button className="btn" disabled={!perpsAddress || isPending} onClick={onFund}>Fondear contrato</button>
+        </div>
+        {localErr && <div className="error">{localErr}</div>}
+        {error && <div className="error">{String(error)}</div>}
       </div>
-      {localErr && <div style={{ color:'salmon' }}>{localErr}</div>}
-      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
     </div>
   )
+}
+
+// Combined, pro-looking panels
+function TradePanel({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  const [isLong, setIsLong] = useState(true)
+  const [leverage, setLeverage] = useState(10)
+  const [marginEth, setMarginEth] = useState('0.1')
+  return (
+    <div className="card">
+      <div className="card-header between">
+        <div className="segmented">
+          <button className={isLong? 'seg active':'seg'} onClick={()=>setIsLong(true)}>Long</button>
+          <button className={!isLong? 'seg active':'seg'} onClick={()=>setIsLong(false)}>Short</button>
+        </div>
+      </div>
+      <div className="card-body grid gap-12">
+        <div className="field">
+          <label>Leverage: <strong>x{leverage}</strong></label>
+          <input type="range" min={1} max={150} step={1} value={leverage} onChange={e=>setLeverage(parseInt(e.target.value||'1'))} />
+        </div>
+        <div className="field">
+          <label>Margin (ETH)</label>
+          <input className="input" value={marginEth} onChange={e=>setMarginEth(e.target.value)} />
+        </div>
+        <div className="row">
+          <OpenPosition perpsAddress={perpsAddress} chainKey={chainKey} compact controlled={{ isLong, setIsLong, leverage, setLeverage, marginEth, setMarginEth }} />
+          <div style={{ width: 8 }} />
+          <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chainKey} minimal />
+        </div>
+        <div className="muted small">Fees: 0.10% al abrir y 0.10% al cerrar</div>
+      </div>
+    </div>
+  )
+}
+
+function PositionCard({ perpsAddress, oracleAddress }: { perpsAddress: string, oracleAddress: string }) {
+  return (
+    <div className="card">
+      <div className="card-header"><h3>Mi posición</h3></div>
+      <div className="card-body">
+        <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
+      </div>
+    </div>
+  )
+}
+
+function OracleCard({ oracleAddress }: { oracleAddress: string }) {
+  return (
+    <div className="card">
+      <div className="card-header"><h3>Precio BTC.D (oráculo)</h3></div>
+      <div className="card-body">
+        <OraclePrice oracleAddress={oracleAddress} />
+      </div>
+    </div>
+  )
+}
+
+function LiquidationCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  return (
+    <div className="card">
+      <div className="card-header"><h3>Liquidación</h3></div>
+      <div className="card-body">
+        <LiquidateSelf perpsAddress={perpsAddress} chainKey={chainKey} />
+      </div>
+    </div>
+  )
+}
+
+function StopsCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  return <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} />
+}
+
+function ConfigCard({ oracleAddress, perpsAddress }: { oracleAddress: string, perpsAddress: string }) {
+  return (
+    <div className="card">
+      <div className="card-header"><h3>Config</h3></div>
+      <div className="card-body grid gap-8">
+        <div className="field">
+          <label>Oracle</label>
+          <div className="code-row"><span className="mono small">{oracleAddress || '—'}</span><CopyBtn text={oracleAddress} /></div>
+        </div>
+        <div className="field">
+          <label>Perps</label>
+          <div className="code-row"><span className="mono small">{perpsAddress || '—'}</span><CopyBtn text={perpsAddress} /></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TreasuryCard({ perpsAddress, desired }: { perpsAddress: string, desired: 'base'|'baseSepolia' }) {
+  return <ContractTreasury perpsAddress={perpsAddress} desired={desired} />
+}
+
+function CopyBtn({ text }: { text: string }) {
+  return <button className="btn sm" onClick={()=>navigator.clipboard?.writeText(text || '')}>Copiar</button>
 }

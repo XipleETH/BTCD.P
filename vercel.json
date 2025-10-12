@@ -1,8 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
-  "devCommand": "npm -w packages/frontend run dev",
+  "buildCommand": "cd packages/frontend && npm run build",
+  "devCommand": "cd packages/frontend && npm run dev",
   "installCommand": "npm install",
-  "framework": null,
-  "outputDirectory": "packages/frontend/dist"
+  "framework": "vite",
+  "outputDirectory": "packages/frontend/dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

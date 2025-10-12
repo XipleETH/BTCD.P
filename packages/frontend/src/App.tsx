@@ -4,11 +4,25 @@ import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
-import * as addressesModule from './addresses'
+import { deployed } from './addresses'
+
+// Oracle event ABI for on-chain history and live updates
+const oracleEventAbi = [
+  {
+    "type": "event",
+    "name": "PriceUpdated",
+    "inputs": [
+      { "name": "price", "type": "int256", "indexed": false },
+      { "name": "timestamp", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  }
+ ] as const
 
 // Minimal ABI for our contracts
 const oracleAbi = [
-  { "inputs": [], "name": "latestAnswer", "outputs": [{"internalType":"int256","name":"","type":"int256"}], "stateMutability":"view", "type":"function" }
+  { "inputs": [], "name": "latestAnswer", "outputs": [{"internalType":"int256","name":"","type":"int256"}], "stateMutability":"view", "type":"function" },
+  { "inputs": [], "name": "latestTimestamp", "outputs": [{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability":"view", "type":"function" }
 ] as const
 const perpsAbi = [
   { "inputs": [{"internalType":"bool","name":"isLong","type":"bool"},{"internalType":"uint256","name":"leverage","type":"uint256"}], "name":"openPosition", "outputs": [], "stateMutability":"payable","type":"function" },
@@ -36,44 +50,74 @@ import { createChart, ColorType, Time, IChartApi, ISeriesApi, UTCTimestamp } fro
 type Tick = { time: UTCTimestamp, value: number }
 type Candle = { time: UTCTimestamp, open: number, high: number, low: number, close: number }
 
-function DominanceChart({ oracleAddress }: { oracleAddress: string }) {
+function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
   const [ticks, setTicks] = useState<Tick[]>([])
   const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const containerId = 'chart_container'
 
-  const { data: priceRaw } = useReadContract({
+  // Build history from on-chain events and then poll live values
+  const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
+
+  // Fetch historical PriceUpdated events (recent block range) when oracle/chain changes
+  useEffect(() => {
+    let cancelled = false
+    async function loadLogs() {
+      try {
+        if (!oracleAddress) return
+  const client = createPublicClient({ chain: desiredChain, transport: viemHttp() })
+        const latest = await client.getBlockNumber()
+        // Load last ~50k blocks (adjust as needed); guard underflow
+        const span = 50000n
+        const fromBlock = latest > span ? latest - span : 0n
+        const logs = await client.getLogs({
+          address: oracleAddress as `0x${string}`,
+          abi: oracleEventAbi as any,
+          eventName: 'PriceUpdated',
+          fromBlock,
+          toBlock: latest
+        })
+        const points: Tick[] = logs.map((l: any) => {
+          const price = Number(formatUnits(BigInt(l.args.price), 8))
+          const ts = Number(l.args.timestamp) as UTCTimestamp
+          return { time: ts, value: price }
+        }).sort((a,b)=>a.time - b.time)
+        if (!cancelled) setTicks(points.slice(-10000))
+      } catch (e) {
+        // best-effort: ignore errors and keep UI
+        console.warn('loadLogs failed', e)
+      }
+    }
+    loadLogs()
+    return () => { cancelled = true }
+  }, [oracleAddress, chainKey])
+
+  // Poll latestAnswer/latestTimestamp to append live points
+  const { data: latestAns } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestAnswer',
     query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
   })
-
-  // Load persisted ticks on mount
+  const { data: latestTs } = useReadContract({
+    abi: oracleAbi as any,
+    address: (oracleAddress || undefined) as any,
+    functionName: 'latestTimestamp',
+    query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
+  })
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('btcd_ticks')
-      if (raw) {
-        const parsed: Tick[] = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
-          setTicks(parsed)
-        }
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    if (typeof priceRaw === 'bigint') {
-      const v = Number(formatUnits(priceRaw, 8))
-  const point: Tick = { time: Math.floor(Date.now()/1000) as UTCTimestamp, value: v }
+    if (typeof latestAns === 'bigint' && typeof latestTs === 'bigint') {
+      const v = Number(formatUnits(latestAns, 8))
+      const ts = Number(latestTs) as UTCTimestamp
       setTicks(prev => {
-        const next = [...prev, point].slice(-10000) // keep last 10k points
-        try { localStorage.setItem('btcd_ticks', JSON.stringify(next)) } catch {}
-        return next
+        const last = prev[prev.length - 1]
+        if (last && last.time === ts) return prev
+        const next = [...prev, { time: ts, value: v }]
+        return next.slice(-10000)
       })
     }
-  }, [priceRaw])
+  }, [latestAns, latestTs])
 
   // Initialize chart once
   useEffect(() => {
@@ -157,10 +201,9 @@ function AppInner() {
   const [perpsAddress, setPerpsAddress] = useState<string>('')
 
   useEffect(() => {
-    const d: any = (addressesModule as any).deployed || (addressesModule as any).default || (addressesModule as any)
     const key = chain
-    if (d?.[key]?.oracle) setOracleAddress(d[key].oracle)
-    if (d?.[key]?.perps) setPerpsAddress(d[key].perps)
+    if ((deployed as any)?.[key]?.oracle) setOracleAddress((deployed as any)[key].oracle)
+    if ((deployed as any)?.[key]?.perps) setPerpsAddress((deployed as any)[key].perps)
   }, [chain])
 
   return (
@@ -174,7 +217,7 @@ function AppInner() {
           </header>
 
           <div style={{ marginTop: 16 }}>
-            <DominanceChart oracleAddress={oracleAddress} />
+            <DominanceChart oracleAddress={oracleAddress} chainKey={chain} />
           </div>
 
           <section style={{ marginTop: 16 }}>
@@ -230,7 +273,7 @@ function AppInner() {
 }
 
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
-import { parseEther, formatUnits, formatEther } from 'viem'
+import { parseEther, formatUnits, formatEther, createPublicClient, http as viemHttp } from 'viem'
 
 function OpenPosition({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
   const { address } = useAccount()

@@ -24,7 +24,11 @@ const perpsAbi = [
     {"internalType":"uint256","name":"lastUpdate","type":"uint256"}
   ], "stateMutability":"view","type":"function" },
   { "inputs": [], "name": "maintenanceMarginRatioBps", "outputs": [{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability": "view", "type": "function" },
-  { "inputs": [], "name": "takerFeeBps", "outputs": [{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability": "view", "type": "function" }
+  { "inputs": [], "name": "takerFeeBps", "outputs": [{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability": "view", "type": "function" },
+  { "inputs": [{"internalType":"uint256","name":"stopLoss","type":"uint256"},{"internalType":"uint256","name":"takeProfit","type":"uint256"}], "name":"setStops", "outputs": [], "stateMutability":"nonpayable","type":"function" },
+  { "inputs": [{"internalType":"address","name":"trader","type":"address"}], "name":"getStops", "outputs": [{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256","name":"","type":"uint256"}], "stateMutability": "view", "type": "function" },
+  { "inputs": [{"internalType":"address","name":"trader","type":"address"}], "name":"shouldClose", "outputs": [{"internalType":"bool","name":"","type":"bool"},{"internalType":"bool","name":"","type":"bool"},{"internalType":"bool","name":"","type":"bool"}], "stateMutability": "view", "type": "function" },
+  { "inputs": [{"internalType":"address","name":"trader","type":"address"}], "name":"closeIfTriggered", "outputs": [], "stateMutability":"nonpayable","type":"function" }
 ] as const
 
 import { createChart, ColorType, Time, IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
@@ -193,18 +197,25 @@ function AppInner() {
           </section>
 
           <section style={{ marginTop: 16 }}>
+            <h3>Stops (SL/TP)</h3>
+            <StopsManager perpsAddress={perpsAddress} chainKey={chain} />
+          </section>
+
+          <section style={{ marginTop: 16 }}>
             <h3>Precio BTC.D (oráculo)</h3>
             <OraclePrice oracleAddress={oracleAddress} />
           </section>
 
           <section style={{ marginTop: 16 }}>
             <h3>Abrir posición</h3>
+            <div style={{ marginBottom: 8, color:'#94a3b8' }}>Fee: 0.10% al abrir</div>
             <OpenPosition perpsAddress={perpsAddress} chainKey={chain} />
           </section>
 
           <section style={{ marginTop: 16 }}>
             <h3>Cerrar posición</h3>
-            <ClosePosition perpsAddress={perpsAddress} chainKey={chain} />
+            <div style={{ marginBottom: 8, color:'#94a3b8' }}>Fee: 0.10% al cerrar</div>
+            <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} />
           </section>
 
           <section style={{ marginTop: 16 }}>
@@ -440,6 +451,72 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey }: { perpsAddress
         } catch {}
       }}>Cerrar</button>
       {simClose.error && <div style={{ color:'salmon' }}>Simulación falló: {String((simClose.error as any)?.shortMessage || simClose.error.message)}</div>}
+      {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
+      {(isPending || mining) && <div>Enviando transacción...</div>}
+    </div>
+  )
+}
+
+function StopsManager({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  const { address } = useAccount()
+  const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
+  const { data: stops } = useReadContract({
+    abi: perpsAbi as any,
+    address: (perpsAddress || undefined) as any,
+    functionName: 'getStops',
+    args: [address!],
+    query: { enabled: Boolean(perpsAddress && address), refetchInterval: 15000 }
+  }) as { data: any }
+  const { data: trig } = useReadContract({
+    abi: perpsAbi as any,
+    address: (perpsAddress || undefined) as any,
+    functionName: 'shouldClose',
+    args: [address!],
+    query: { enabled: Boolean(perpsAddress && address), refetchInterval: 15000 }
+  })
+  const [slPct, setSlPct] = useState('')
+  const [tpPct, setTpPct] = useState('')
+  const { data: hash, writeContract, isPending, error } = useWriteContract()
+  const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
+  const toScaled = (s: string) => {
+    const v = parseFloat((s||'').replace(',','.'))
+    if (isNaN(v) || v < 0 || v > 100) return null
+    return BigInt(Math.round(v * 1e8))
+  }
+  const onSet = async () => {
+    const sl = slPct ? toScaled(slPct) : 0n
+    const tp = tpPct ? toScaled(tpPct) : 0n
+    if (sl === null || tp === null) return
+    await writeContract({
+      abi: perpsAbi as any,
+      address: perpsAddress as any,
+      functionName: 'setStops',
+      args: [sl as any, tp as any],
+      chainId: desiredChain.id,
+    })
+  }
+  const onCloseNow = async () => {
+    await writeContract({
+      abi: perpsAbi as any,
+      address: perpsAddress as any,
+      functionName: 'closeIfTriggered',
+      args: [address!],
+      chainId: desiredChain.id,
+      gas: 350000n,
+    })
+  }
+  const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
+  const trigArr = (trig || []) as [boolean, boolean, boolean]
+  return (
+    <div style={{ display:'grid', gap:8 }}>
+      <div>Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+      <div style={{ display:'flex', gap:8 }}>
+        <input placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
+        <input placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
+        <button disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear Stops</button>
+      </div>
+      <div>Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
+      <button disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
       {error && <div style={{ color:'salmon' }}>{String(error)}</div>}
       {(isPending || mining) && <div>Enviando transacción...</div>}
     </div>

@@ -1,7 +1,7 @@
 {
   "network": "baseSepolia",
   "oracle": "0x54105f0f40c6190f982c71836aCc25c91030CADD",
-  "perps": "0x4d23CAb796f742246b7Ffc68236C894BB3389f4D",
+  "perps": "0x84928F62e13C272d3553427b8753A8ae8Fa3324D",
   "deployer": "0x5f9A424637b91A107AE5F6d49cC3Cba9069FE438",
-  "timestamp": 1760204961913
+  "timestamp": 1760297312520
 }

@@ -67,24 +67,42 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     async function loadLogs() {
       try {
         if (!oracleAddress) return
-  const client = createPublicClient({ chain: desiredChain, transport: viemHttp() })
+        const rpcUrl = (chainKey === 'baseSepolia'
+          ? (import.meta as any).env?.VITE_BASE_SEPOLIA_RPC
+          : (import.meta as any).env?.VITE_BASE_RPC) as string | undefined
+        const transport = rpcUrl ? viemHttp(rpcUrl) : viemHttp()
+        const client = createPublicClient({ chain: desiredChain, transport })
         const latest = await client.getBlockNumber()
-        // Load last ~50k blocks (adjust as needed); guard underflow
-        const span = 50000n
-        const fromBlock = latest > span ? latest - span : 0n
-        const logs = await client.getLogs({
-          address: oracleAddress as `0x${string}`,
-          abi: oracleEventAbi as any,
-          eventName: 'PriceUpdated',
-          fromBlock,
-          toBlock: latest
-        })
-        const points: Tick[] = logs.map((l: any) => {
-          const price = Number(formatUnits(BigInt(l.args.price), 8))
-          const ts = Number(l.args.timestamp) as UTCTimestamp
-          return { time: ts, value: price }
-        }).sort((a,b)=>a.time - b.time)
-        if (!cancelled) setTicks(points.slice(-10000))
+        // Page backwards to gather a decent on-chain history without hitting provider limits
+        const step = 20000n
+        const maxPages = 20 // up to ~400k blocks
+        let to = latest
+        let pages = 0
+        const acc: Tick[] = []
+        while (to > 0n && pages < maxPages) {
+          const from = to > step ? to - step : 0n
+          try {
+            const logs = await client.getLogs({
+              address: oracleAddress as `0x${string}`,
+              abi: oracleEventAbi as any,
+              eventName: 'PriceUpdated',
+              fromBlock: from,
+              toBlock: to,
+            })
+            for (const l of logs) {
+              const price = Number(formatUnits(BigInt((l as any).args.price), 8))
+              const ts = Number((l as any).args.timestamp) as UTCTimestamp
+              acc.push({ time: ts, value: price })
+            }
+          } catch (e) {
+            // ignore page errors (e.g., rate limits); continue with smaller history
+          }
+          pages++
+          if (from === 0n) break
+          to = from - 1n
+        }
+        acc.sort((a,b)=>a.time - b.time)
+        if (!cancelled) setTicks(acc.slice(-10000))
       } catch (e) {
         // best-effort: ignore errors and keep UI
         console.warn('loadLogs failed', e)

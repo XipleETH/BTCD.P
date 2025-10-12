@@ -33,7 +33,7 @@ jobs:
         run: npm install
 
       - name: Build frontend (Pages base path)
-        run: VITE_BASE=/BTCD.P/ npm -w packages/frontend run build
+        run: VITE_BASE_SEPOLIA_RPC=${{ vars.VITE_BASE_SEPOLIA_RPC }} VITE_BASE_RPC=${{ vars.VITE_BASE_RPC }} VITE_BASE=/BTCD.P/ npm -w packages/frontend run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

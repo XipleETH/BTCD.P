@@ -16,10 +16,27 @@ async function main() {
   const oracleAddr = process.env.ORACLE
   if (!oracleAddr) throw new Error('Set ORACLE in .env')
   const pct = await fetchBTCD()
-  const priceScaled = ethers.parseUnits(pct.toFixed(8), 8)
   const oracle = await ethers.getContractAt('BTCDOracle', oracleAddr)
+
+  // Optional guard: only push if change >= MIN_CHANGE vs on-chain latest
+  const minChange = Number(process.env.MIN_CHANGE || '0') // percentage points
+  if (minChange > 0) {
+    try {
+      const onchainRaw: bigint = await (oracle as any).latestAnswer()
+      const onchain = Number(ethers.formatUnits(onchainRaw, 8))
+      const diff = Math.abs(pct - onchain)
+      if (diff < minChange) {
+        console.log(`No push: |Δ|=${diff.toFixed(6)}% < MIN_CHANGE=${minChange}%. Current=${onchain.toFixed(6)}% Fetched=${pct.toFixed(6)}%`)
+        return
+      }
+    } catch (e) {
+      console.warn('Could not read latestAnswer, proceeding with push. Reason:', (e as any)?.message || e)
+    }
+  }
+
+  const priceScaled = ethers.parseUnits(pct.toFixed(8), 8)
   const tx = await oracle.pushPrice(priceScaled)
-  console.log('Pushing BTC.D', pct.toFixed(2), '% tx=', tx.hash)
+  console.log('Pushing BTC.D', pct.toFixed(6), '% tx=', tx.hash)
   await tx.wait()
   console.log('Done')
 }

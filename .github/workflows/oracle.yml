@@ -1,0 +1,46 @@
+name: BTCD Oracle Push
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/1 * * * *'
+
+jobs:
+  push-btcd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Install deps (contracts)
+        run: npm i --workspace packages/contracts --no-audit --no-fund
+
+      - name: Compile contracts
+        run: npm -w packages/contracts run build
+
+      - name: Run one-shot CoinGecko push
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          export MIN_CHANGE=${{ vars.MIN_CHANGE_BTCD || '0' }}
+          npm -w packages/contracts run push:cg
+        env:
+          # For hardhat network resolution
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+          MIN_CHANGE: ${{ vars.MIN_CHANGE_BTCD }}
+
+      - name: Done
+        run: echo "Push completed"

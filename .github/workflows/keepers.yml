@@ -1,0 +1,45 @@
+name: BTCD Keepers
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/5 * * * *'
+
+jobs:
+  run-keepers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Install deps (contracts)
+        run: npm i --workspace packages/contracts --no-audit --no-fund
+
+      - name: Compile contracts
+        run: npm -w packages/contracts run build
+
+      - name: Run keepers
+        run: |
+          export PERPS=${{ secrets.PERPS_ADDRESS }}
+          export TRADERS=${{ vars.KEEPERS_TRADERS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          npm -w packages/contracts run keepers
+        env:
+          PERPS: ${{ secrets.PERPS_ADDRESS }}
+          TRADERS: ${{ vars.KEEPERS_TRADERS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+
+      - name: Done
+        run: echo "Keepers completed"

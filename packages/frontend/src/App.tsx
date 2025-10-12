@@ -239,14 +239,12 @@ function AppInner() {
             <section className="main-grid">
               <div className="col">
                 <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} />
-                <StopsCard perpsAddress={perpsAddress} chainKey={chain} />
+                <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
+                <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
               </div>
               <div className="col">
                 <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
-                <OracleCard oracleAddress={oracleAddress} />
                 <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
-                <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
-                <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
               </div>
             </section>
           </main>
@@ -411,8 +409,6 @@ function MyPosition({ perpsAddress, oracleAddress }: { perpsAddress: string, ora
 
   return (
     <div className="stats-grid">
-      <div className="stat"><span className="stat-label">Dirección</span><span className="stat-value mono small">{address}</span></div>
-      <div className="stat"><span className="stat-label">Dirección Perps</span><span className="stat-value mono small">{perpsAddress}</span></div>
       <div className="stat"><span className="stat-label">Lado</span><span className={isLong ? 'badge long':'badge short'}>{isLong ? 'Long' : 'Short'}</span></div>
       <div className="stat"><span className="stat-label">Leverage</span><span className="stat-value">x{String(leverage)}</span></div>
       <div className="stat"><span className="stat-label">Entrada</span><span className="stat-value">{entryPct.toFixed(4)}%</span></div>
@@ -509,7 +505,7 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
   )
 }
 
-function StopsManager({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', compact?: boolean }) {
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: stops } = useReadContract({
@@ -559,21 +555,25 @@ function StopsManager({ perpsAddress, chainKey }: { perpsAddress: string, chainK
   }
   const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
   const trigArr = (trig || []) as [boolean, boolean, boolean]
+  const inner = (
+    <div className="grid gap-8">
+      <div className="muted">Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+      <div className="row">
+        <input className="input" placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
+        <input className="input" placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
+        <button className="btn" disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear</button>
+      </div>
+      <div className="muted">Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
+      <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
+      {error && <div className="error">{String(error)}</div>}
+      {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
+    </div>
+  )
+  if (compact) return inner
   return (
     <div className="card">
       <div className="card-header"><h3>Stops (SL / TP)</h3></div>
-      <div className="card-body grid gap-8">
-        <div className="muted">Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
-        <div className="row">
-          <input className="input" placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
-          <input className="input" placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
-          <button className="btn" disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear</button>
-        </div>
-        <div className="muted">Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
-        <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
-        {error && <div className="error">{String(error)}</div>}
-        {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
-      </div>
+      <div className="card-body">{inner}</div>
     </div>
   )
 }
@@ -717,13 +717,15 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: s
   const [marginEth, setMarginEth] = useState('0.1')
   return (
     <div className="card">
-      <div className="card-header between">
-        <div className="segmented">
-          <button className={isLong? 'seg active':'seg'} onClick={()=>setIsLong(true)}>Long</button>
-          <button className={!isLong? 'seg active':'seg'} onClick={()=>setIsLong(false)}>Short</button>
-        </div>
-      </div>
       <div className="card-body grid gap-12">
+        <div>
+          <div className="muted small">Precio BTC.D (oráculo)</div>
+          <OraclePrice oracleAddress={oracleAddress} />
+        </div>
+        <div className="segmented">
+          <button className={isLong? 'seg long-btn active':'seg long-btn'} onClick={()=>setIsLong(true)}>Long</button>
+          <button className={!isLong? 'seg short-btn active':'seg short-btn'} onClick={()=>setIsLong(false)}>Short</button>
+        </div>
         <div className="field">
           <label>Leverage: <strong>x{leverage}</strong></label>
           <input type="range" min={1} max={150} step={1} value={leverage} onChange={e=>setLeverage(parseInt(e.target.value||'1'))} />
@@ -737,6 +739,7 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: s
           <div style={{ width: 8 }} />
           <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chainKey} minimal />
         </div>
+        <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} compact />
         <div className="muted small">Fees: 0.10% al abrir y 0.10% al cerrar</div>
       </div>
     </div>
@@ -755,14 +758,7 @@ function PositionCard({ perpsAddress, oracleAddress }: { perpsAddress: string, o
 }
 
 function OracleCard({ oracleAddress }: { oracleAddress: string }) {
-  return (
-    <div className="card">
-      <div className="card-header"><h3>Precio BTC.D (oráculo)</h3></div>
-      <div className="card-body">
-        <OraclePrice oracleAddress={oracleAddress} />
-      </div>
-    </div>
-  )
+  return null
 }
 
 function LiquidationCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
@@ -783,7 +779,7 @@ function StopsCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey:
 function ConfigCard({ oracleAddress, perpsAddress }: { oracleAddress: string, perpsAddress: string }) {
   return (
     <div className="card">
-      <div className="card-header"><h3>Config</h3></div>
+      <div className="card-header"><h3>Contracts</h3></div>
       <div className="card-body grid gap-8">
         <div className="field">
           <label>Oracle</label>

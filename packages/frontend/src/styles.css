@@ -37,6 +37,10 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .seg { background: transparent; color: var(--muted); padding: 6px 10px; border: none; cursor: pointer; border-right: 1px solid var(--border); }
 .seg:last-child { border-right: none; }
 .seg.active { background: #162035; color: var(--text); }
+.long-btn { color: var(--success); }
+.short-btn { color: var(--danger); }
+.long-btn.active { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); }
+.short-btn.active { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); }
 
 .field { display: grid; gap: 6px; }
 .field label { color: var(--muted); font-size: 12px; }

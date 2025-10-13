@@ -36,11 +36,17 @@ jobs:
           export ORACLE=${{ secrets.ORACLE_ADDRESS }}
           export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          export START_BLOCK=${{ vars.HISTORY_START_BLOCK }}
+          export HIST_STEP=${{ vars.HIST_STEP }}
+          export HIST_MAX_PAGES=${{ vars.HIST_MAX_PAGES }}
           npm -w packages/contracts run export:history
         env:
           ORACLE: ${{ secrets.ORACLE_ADDRESS }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+          START_BLOCK: ${{ vars.HISTORY_START_BLOCK }}
+          HIST_STEP: ${{ vars.HIST_STEP }}
+          HIST_MAX_PAGES: ${{ vars.HIST_MAX_PAGES }}
 
       - name: Commit history JSON if changed
         run: |

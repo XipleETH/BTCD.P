@@ -38,8 +38,9 @@ async function main() {
   // Topic0 for PriceUpdated(int256,uint256)
   const topic = ethers.id('PriceUpdated(int256,uint256)')
 
-  while (to > 0 && pages < maxPages) {
-    const from = to > step ? to - step : 0
+  const lowerBound = startBlockEnv ?? 0
+  while (to > lowerBound && pages < maxPages) {
+    const from = Math.max(to - step, lowerBound)
     try {
       const logs = await provider.getLogs({
         address: oracle as `0x${string}`,
@@ -65,8 +66,7 @@ async function main() {
       console.warn('getLogs page failed', from.toString(), to.toString(), e?.message || e)
     }
     pages++
-    if (startBlockEnv !== undefined && from === 0) break
-    if (from === 0) break
+    if (from <= lowerBound) break
     to = from - 1
   }
 

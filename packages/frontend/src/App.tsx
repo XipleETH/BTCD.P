@@ -61,16 +61,32 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
 
-  // Fetch cloud-hosted history JSON first, then fallback to on-chain logs
+  // Fetch cloud-hosted history JSON first, then fallback to on-chain logs; also bootstrap from localStorage
   useEffect(() => {
     let cancelled = false
     async function loadCloudThenLogs() {
       try {
         if (!oracleAddress) return
-        // 1) Try cloud JSON
+        const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+
+        // 0) Try localStorage bootstrap (survives reloads between cron updates)
         try {
-          const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-          const res = await fetch(`/history/${key}-ticks.json`, { cache: 'no-store' })
+          const raw = localStorage.getItem(`btcd:ticks:${key}`)
+          if (raw) {
+            const arr = JSON.parse(raw)
+            if (Array.isArray(arr)) {
+              const pts = arr.map((p: any) => ({ time: Number(p.time) as UTCTimestamp, value: Number(p.value) }))
+              pts.sort((a,b)=>a.time-b.time)
+              if (!cancelled) setTicks(pts.slice(-10000))
+            }
+          }
+        } catch {}
+
+        // 1) Try cloud JSON (respect base path)
+        try {
+          const baseUrl = (import.meta as any).env?.BASE_URL || (import.meta as any).env?.BASE || (import.meta as any).env?.VITE_BASE || '/'
+          const url = `${baseUrl}history/${key}-ticks.json`
+          const res = await fetch(url, { cache: 'no-store' })
           if (res.ok) {
             const j = await res.json()
             if (Array.isArray(j.points)) {
@@ -159,7 +175,13 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
         const last = prev[prev.length - 1]
         if (last && last.time === ts) return prev
         const next = [...prev, { time: ts, value: v }]
-        return next.slice(-10000)
+        const out = next.slice(-10000)
+        // persist per-chain to survive reloads
+        try {
+          const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base')
+          localStorage.setItem(`btcd:ticks:${key}`, JSON.stringify(out))
+        } catch {}
+        return out
       })
     }
   }, [latestAns, latestTs])

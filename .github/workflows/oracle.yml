@@ -28,6 +28,17 @@ jobs:
       - name: Compile contracts
         run: npm -w packages/contracts run build
 
+      - name: Check oracle status (pre)
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          npm -w packages/contracts run check:oracle
+        env:
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+
       - name: Run one-shot CoinGecko push
         run: |
           export ORACLE=${{ secrets.ORACLE_ADDRESS }}
@@ -41,6 +52,17 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
           MIN_CHANGE: ${{ vars.MIN_CHANGE_BTCD }}
+
+      - name: Check oracle status (post)
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          npm -w packages/contracts run check:oracle
+        env:
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
 
       - name: Done
         run: echo "Push completed"

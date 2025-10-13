@@ -5,11 +5,27 @@ import { ethers } from 'hardhat'
 dotenv.config()
 
 async function fetchBTCD(): Promise<number> {
-  // CoinGecko markets includes market cap share. Alternative: /global for market_cap_percentage.btc
-  const resp = await axios.get('https://api.coingecko.com/api/v3/global')
-  const pct = resp.data?.data?.market_cap_percentage?.btc
-  if (typeof pct !== 'number') throw new Error('Invalid response from CoinGecko')
-  return pct // e.g., 60.12
+  const maxAttempts = 5
+  let delay = 1000
+  for (let i = 1; i <= maxAttempts; i++) {
+    try {
+      const resp = await axios.get('https://api.coingecko.com/api/v3/global', {
+        headers: { 'User-Agent': 'BTCD-Oracle/1.0 (+github actions)' },
+        timeout: 10000,
+      })
+      const pct = resp.data?.data?.market_cap_percentage?.btc
+      if (typeof pct !== 'number') throw new Error('Invalid response from CoinGecko')
+      return pct // e.g., 60.12
+    } catch (e: any) {
+      const status = e?.response?.status
+      const msg = e?.message || String(e)
+      console.error(`fetchBTCD attempt ${i} failed:`, status || '', msg)
+      if (status === 429) delay = Math.min(delay * 2, 15000)
+      if (i < maxAttempts) await new Promise(r => setTimeout(r, delay))
+      else throw e
+    }
+  }
+  throw new Error('unreachable')
 }
 
 async function main() {

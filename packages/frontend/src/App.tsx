@@ -61,12 +61,27 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
 
-  // Fetch historical PriceUpdated events (recent block range) when oracle/chain changes
+  // Fetch cloud-hosted history JSON first, then fallback to on-chain logs
   useEffect(() => {
     let cancelled = false
-    async function loadLogs() {
+    async function loadCloudThenLogs() {
       try {
         if (!oracleAddress) return
+        // 1) Try cloud JSON
+        try {
+          const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+          const res = await fetch(`/history/${key}-ticks.json`, { cache: 'no-store' })
+          if (res.ok) {
+            const j = await res.json()
+            if (Array.isArray(j.points)) {
+              const pts: Tick[] = j.points.map((p: any) => ({ time: Number(p.time) as UTCTimestamp, value: Number(p.value) }))
+              pts.sort((a,b)=>a.time-b.time)
+              if (!cancelled) setTicks(pts.slice(-10000))
+            }
+          }
+        } catch {}
+
+        // 2) Append/fallback with on-chain logs
         const rpcUrl = (chainKey === 'baseSepolia'
           ? (import.meta as any).env?.VITE_BASE_SEPOLIA_RPC
           : (import.meta as any).env?.VITE_BASE_RPC) as string | undefined
@@ -101,14 +116,25 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           if (from === 0n) break
           to = from - 1n
         }
-        acc.sort((a,b)=>a.time - b.time)
-        if (!cancelled) setTicks(acc.slice(-10000))
+        if (acc.length) {
+          acc.sort((a,b)=>a.time - b.time)
+          // Merge with any cloud points to ensure no duplicates
+          setTicks(prev => {
+            const merged = [...prev, ...acc]
+            merged.sort((a,b)=>a.time-b.time)
+            // de-dup by time
+            const dedup: Tick[] = []
+            let lastT = -1
+            for (const t of merged) { if (t.time !== lastT as any) { dedup.push(t); lastT = t.time as any } }
+            return dedup.slice(-10000)
+          })
+        }
       } catch (e) {
         // best-effort: ignore errors and keep UI
         console.warn('loadLogs failed', e)
       }
     }
-    loadLogs()
+    loadCloudThenLogs()
     return () => { cancelled = true }
   }, [oracleAddress, chainKey])
 

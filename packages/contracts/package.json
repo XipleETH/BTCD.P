@@ -10,7 +10,8 @@
     "push:cg": "hardhat run scripts/coingecko-push.ts --network baseSepolia",
     "daemon:cg": "hardhat run scripts/coingecko-daemon.ts --network baseSepolia",
     "keepers": "hardhat run scripts/keepers.ts --network baseSepolia",
-    "check:oracle": "hardhat run scripts/check-oracle.ts --network baseSepolia"
+    "check:oracle": "hardhat run scripts/check-oracle.ts --network baseSepolia",
+    "export:history": "hardhat run scripts/export-history.ts --network baseSepolia"
   },
   "devDependencies": {
     "@types/node": "^20.16.10",

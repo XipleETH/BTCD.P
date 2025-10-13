@@ -1,0 +1,54 @@
+name: Export and Commit Oracle History
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  export-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Install deps (contracts)
+        run: npm i --workspace packages/contracts --no-audit --no-fund
+
+      - name: Compile contracts
+        run: npm -w packages/contracts run build
+
+      - name: Export history to frontend/public
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          npm -w packages/contracts run export:history
+        env:
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+
+      - name: Commit history JSON if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add packages/frontend/public/history/*.json || true
+          git commit -m "chore(history): update oracle ticks" || echo "No changes"
+          git push || true
+
+      - name: Done
+        run: echo "History exported"

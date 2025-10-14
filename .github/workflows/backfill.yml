@@ -1,0 +1,59 @@
+name: Backfill DB from Oracle Logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      START_BLOCK:
+        description: "Start block (optional, overrides repo var)"
+        required: false
+      HIST_STEP:
+        description: "Blocks per page (optional, overrides repo var)"
+        required: false
+      HIST_MAX_PAGES:
+        description: "Max pages (optional, overrides repo var)"
+        required: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Install deps (contracts)
+        run: npm i --workspace packages/contracts --no-audit --no-fund
+
+      - name: Compile contracts
+        run: npm -w packages/contracts run build
+
+      - name: Run backfill to DB
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          export INGEST_URL=${{ secrets.INGEST_URL }}
+          export INGEST_SECRET=${{ secrets.INGEST_SECRET }}
+          export START_BLOCK=${{ github.event.inputs.START_BLOCK || vars.HISTORY_START_BLOCK }}
+          export HIST_STEP=${{ github.event.inputs.HIST_STEP || vars.HIST_STEP }}
+          export HIST_MAX_PAGES=${{ github.event.inputs.HIST_MAX_PAGES || vars.HIST_MAX_PAGES }}
+          npm -w packages/contracts run backfill:db
+        env:
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+          INGEST_URL: ${{ secrets.INGEST_URL }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+          START_BLOCK: ${{ github.event.inputs.START_BLOCK }}
+          HIST_STEP: ${{ github.event.inputs.HIST_STEP }}
+          HIST_MAX_PAGES: ${{ github.event.inputs.HIST_MAX_PAGES }}
+
+      - name: Done
+        run: echo "Backfill completed"

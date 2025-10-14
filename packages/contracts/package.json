@@ -12,7 +12,8 @@
     "keepers": "hardhat run scripts/keepers.ts --network baseSepolia",
     "check:oracle": "hardhat run scripts/check-oracle.ts --network baseSepolia",
     "export:history": "hardhat run scripts/export-history.ts --network baseSepolia",
-    "post:push:sync": "hardhat run scripts/post-push-sync.ts --network baseSepolia"
+    "post:push:sync": "hardhat run scripts/post-push-sync.ts --network baseSepolia",
+    "backfill:db": "hardhat run scripts/backfill-to-db.ts --network baseSepolia"
   },
   "devDependencies": {
     "@types/node": "^20.16.10",

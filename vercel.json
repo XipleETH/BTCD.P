@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm -w packages/frontend run build && rm -rf dist && mkdir -p dist && cp -r packages/frontend/dist/* dist/",
+  "buildCommand": "cd packages/frontend && npm ci && npm run build && cd ../../ && rm -rf dist && mkdir -p dist && cp -r packages/frontend/dist/* dist/",
   "installCommand": "npm install",
   "framework": "vite",
   "outputDirectory": "dist",

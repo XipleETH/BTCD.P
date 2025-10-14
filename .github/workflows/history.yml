@@ -1,15 +1,16 @@
-name: Export and Commit Oracle History
+name: Export and Commit Oracle History (disabled)
 
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '0 0 1 1 *' # effectively never (once a year)
 
 permissions:
   contents: write
 
 jobs:
   export-history:
+    if: false # disabled per switch to database-backed chart
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

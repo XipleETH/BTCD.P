@@ -54,6 +54,20 @@ jobs:
           BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
           MIN_CHANGE: ${{ vars.MIN_CHANGE_BTCD }}
           FORCE_MAX_AGE_SEC: ${{ vars.FORCE_MAX_AGE_SEC }}
+      - name: Sync latest tick to DB
+        run: |
+          export ORACLE=${{ secrets.ORACLE_ADDRESS }}
+          export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
+          export INGEST_URL=${{ secrets.INGEST_URL }}
+          export INGEST_SECRET=${{ secrets.INGEST_SECRET }}
+          npm -w packages/contracts run post:push:sync
+        env:
+          ORACLE: ${{ secrets.ORACLE_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
+          INGEST_URL: ${{ secrets.INGEST_URL }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
 
       - name: Check oracle status (post)
         run: |

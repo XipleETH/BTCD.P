@@ -66,8 +66,9 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     let cancelled = false
     const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
     const lsKey = `btcd:candles:${key}:${tf}`
-    const baseUrl = (import.meta as any).env?.BASE_URL || (import.meta as any).env?.BASE || (import.meta as any).env?.VITE_BASE || '/'
-    const url = `${baseUrl}history/${key}-candles-${tf}.json`
+  // Use serverless API endpoint backed by DB
+  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}`
     const load = async () => {
       try {
         // localStorage bootstrap

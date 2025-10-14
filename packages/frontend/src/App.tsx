@@ -161,37 +161,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = null }
   }, [])
 
-  // Periodically refresh cloud history to backfill if page stays open long
-  useEffect(() => {
-    let timer: any
-    const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-    const fetchCloud = async () => {
-      try {
-        const baseUrl = (import.meta as any).env?.BASE_URL || (import.meta as any).env?.BASE || (import.meta as any).env?.VITE_BASE || '/'
-        const url = `${baseUrl}history/${key}-ticks.json`
-        const res = await fetch(url, { cache: 'no-store' })
-        if (res.ok) {
-          const j = await res.json()
-          if (Array.isArray(j.points)) {
-            const pts: Tick[] = j.points.map((p: any) => ({ time: Number(p.time) as UTCTimestamp, value: Number(p.value) }))
-            pts.sort((a,b)=>a.time-b.time)
-            setTicks(prev => {
-              const merged = [...prev, ...pts]
-              merged.sort((a,b)=>a.time-b.time)
-              const dedup: Tick[] = []
-              let lastT = -1
-              for (const t of merged) { if (t.time !== lastT as any) { dedup.push(t); lastT = t.time as any } }
-              try { localStorage.setItem(`btcd:ticks:${key}`, JSON.stringify(dedup.slice(-10000))) } catch {}
-              return dedup.slice(-10000)
-            })
-          }
-        }
-      } catch {}
-    }
-    // Every 10 minutes
-    timer = setInterval(fetchCloud, 10 * 60 * 1000)
-    return () => { if (timer) clearInterval(timer) }
-  }, [chainKey])
+  // Removed legacy static history refresh (now using API candles exclusively)
 
   // Update series with pre-aggregated candles
   useEffect(() => {

@@ -45,6 +45,7 @@ jobs:
           export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
           export MIN_CHANGE=${{ vars.MIN_CHANGE_BTCD || '0' }}
+          export FORCE_MAX_AGE_SEC=${{ vars.FORCE_MAX_AGE_SEC || '1800' }}
           npm -w packages/contracts run push:cg
         env:
           # For hardhat network resolution
@@ -52,6 +53,7 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
           MIN_CHANGE: ${{ vars.MIN_CHANGE_BTCD }}
+          FORCE_MAX_AGE_SEC: ${{ vars.FORCE_MAX_AGE_SEC }}
 
       - name: Check oracle status (post)
         run: |

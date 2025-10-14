@@ -34,9 +34,26 @@ async function main() {
   const pct = await fetchBTCD()
   const oracle = await ethers.getContractAt('BTCDOracle', oracleAddr)
 
+  // Force push if oracle data is too old (staleness guard)
+  const forceMaxAgeSec = Number(process.env.FORCE_MAX_AGE_SEC || '0')
+  let isStale = false
+  if (forceMaxAgeSec > 0) {
+    try {
+      const tsRaw: bigint = await (oracle as any).latestTimestamp()
+      const last = Number(tsRaw)
+      const now = Math.floor(Date.now() / 1000)
+      if (last === 0 || (now - last) >= forceMaxAgeSec) {
+        isStale = true
+        console.log(`Oracle is stale by ${last === 0 ? 'unknown' : (now - last) + 's'} (threshold ${forceMaxAgeSec}s). Forcing push.`)
+      }
+    } catch (e) {
+      console.warn('Could not read latestTimestamp to check staleness, proceeding without staleness guard. Reason:', (e as any)?.message || e)
+    }
+  }
+
   // Optional guard: only push if change >= MIN_CHANGE vs on-chain latest
   const minChange = Number(process.env.MIN_CHANGE || '0') // percentage points
-  if (minChange > 0) {
+  if (minChange > 0 && !isStale) {
     try {
       const onchainRaw: bigint = await (oracle as any).latestAnswer()
       const onchain = Number(ethers.formatUnits(onchainRaw, 8))

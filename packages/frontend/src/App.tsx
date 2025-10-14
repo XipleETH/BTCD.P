@@ -52,8 +52,8 @@ type Tick = { time: UTCTimestamp, value: number }
 type Candle = { time: UTCTimestamp, open: number, high: number, low: number, close: number }
 
 function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
-  const [ticks, setTicks] = useState<Tick[]>([])
   const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
+  const [candles, setCandles] = useState<Candle[]>([])
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const containerId = 'chart_container'
@@ -61,98 +61,45 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
 
-  // Fetch cloud-hosted history JSON first, then fallback to on-chain logs; also bootstrap from localStorage
+  // Fetch pre-aggregated candle JSON; bootstrap from localStorage and refresh periodically
   useEffect(() => {
     let cancelled = false
-    async function loadCloudThenLogs() {
+    const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+    const lsKey = `btcd:candles:${key}:${tf}`
+    const baseUrl = (import.meta as any).env?.BASE_URL || (import.meta as any).env?.BASE || (import.meta as any).env?.VITE_BASE || '/'
+    const url = `${baseUrl}history/${key}-candles-${tf}.json`
+    const load = async () => {
       try {
-        if (!oracleAddress) return
-        const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-
-        // 0) Try localStorage bootstrap (survives reloads between cron updates)
+        // localStorage bootstrap
         try {
-          const raw = localStorage.getItem(`btcd:ticks:${key}`)
+          const raw = localStorage.getItem(lsKey)
           if (raw) {
             const arr = JSON.parse(raw)
             if (Array.isArray(arr)) {
-              const pts = arr.map((p: any) => ({ time: Number(p.time) as UTCTimestamp, value: Number(p.value) }))
-              pts.sort((a,b)=>a.time-b.time)
-              if (!cancelled) setTicks(pts.slice(-10000))
+              const cs: Candle[] = arr.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
+              cs.sort((a,b)=>a.time-b.time)
+              if (!cancelled) setCandles(cs)
             }
           }
         } catch {}
-
-        // 1) Try cloud JSON (respect base path)
-        try {
-          const baseUrl = (import.meta as any).env?.BASE_URL || (import.meta as any).env?.BASE || (import.meta as any).env?.VITE_BASE || '/'
-          const url = `${baseUrl}history/${key}-ticks.json`
-          const res = await fetch(url, { cache: 'no-store' })
-          if (res.ok) {
-            const j = await res.json()
-            if (Array.isArray(j.points)) {
-              const pts: Tick[] = j.points.map((p: any) => ({ time: Number(p.time) as UTCTimestamp, value: Number(p.value) }))
-              pts.sort((a,b)=>a.time-b.time)
-              if (!cancelled) setTicks(pts.slice(-10000))
-            }
+        // fetch cloud JSON
+        const res = await fetch(url, { cache: 'no-store' })
+        if (res.ok) {
+          const j = await res.json()
+          if (Array.isArray(j.candles)) {
+            const cs: Candle[] = j.candles.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
+            cs.sort((a,b)=>a.time-b.time)
+            if (!cancelled) setCandles(cs)
+            try { localStorage.setItem(lsKey, JSON.stringify(cs)) } catch {}
           }
-        } catch {}
-
-        // 2) Append/fallback with on-chain logs
-        const rpcUrl = (chainKey === 'baseSepolia'
-          ? (import.meta as any).env?.VITE_BASE_SEPOLIA_RPC
-          : (import.meta as any).env?.VITE_BASE_RPC) as string | undefined
-        const transport = rpcUrl ? viemHttp(rpcUrl) : viemHttp()
-        const client = createPublicClient({ chain: desiredChain, transport })
-        const latest = await client.getBlockNumber()
-        // Page backwards to gather a decent on-chain history without hitting provider limits
-        const step = 20000n
-        const maxPages = 20 // up to ~400k blocks
-        let to = latest
-        let pages = 0
-        const acc: Tick[] = []
-        while (to > 0n && pages < maxPages) {
-          const from = to > step ? to - step : 0n
-          try {
-            const logs = await client.getLogs({
-              address: oracleAddress as `0x${string}`,
-              abi: oracleEventAbi as any,
-              eventName: 'PriceUpdated',
-              fromBlock: from,
-              toBlock: to,
-            })
-            for (const l of logs) {
-              const price = Number(formatUnits(BigInt((l as any).args.price), 8))
-              const ts = Number((l as any).args.timestamp) as UTCTimestamp
-              acc.push({ time: ts, value: price })
-            }
-          } catch (e) {
-            // ignore page errors (e.g., rate limits); continue with smaller history
-          }
-          pages++
-          if (from === 0n) break
-          to = from - 1n
-        }
-        if (acc.length) {
-          acc.sort((a,b)=>a.time - b.time)
-          // Merge with any cloud points to ensure no duplicates
-          setTicks(prev => {
-            const merged = [...prev, ...acc]
-            merged.sort((a,b)=>a.time-b.time)
-            // de-dup by time
-            const dedup: Tick[] = []
-            let lastT = -1
-            for (const t of merged) { if (t.time !== lastT as any) { dedup.push(t); lastT = t.time as any } }
-            return dedup.slice(-10000)
-          })
         }
       } catch (e) {
-        // best-effort: ignore errors and keep UI
-        console.warn('loadLogs failed', e)
+        console.warn('load candles failed', e)
       }
     }
-    loadCloudThenLogs()
+    load()
     return () => { cancelled = true }
-  }, [oracleAddress, chainKey])
+  }, [chainKey, tf])
 
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
@@ -171,17 +118,25 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     if (typeof latestAns === 'bigint' && typeof latestTs === 'bigint') {
       const v = Number(formatUnits(latestAns, 8))
       const ts = Number(latestTs) as UTCTimestamp
-      setTicks(prev => {
-        const last = prev[prev.length - 1]
-        if (last && last.time === ts) return prev
-        const next = [...prev, { time: ts, value: v }]
-        const out = next.slice(-10000)
-        // persist per-chain to survive reloads
-        try {
-          const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base')
-          localStorage.setItem(`btcd:ticks:${key}`, JSON.stringify(out))
-        } catch {}
-        return out
+      // Update only the last candle's close/high/low based on live price; we don't append a new candle here
+      setCandles(prev => {
+        if (!prev.length) return prev
+        const bucketSec = tf === '5m' ? 300 : tf === '15m' ? 900 : tf === '1h' ? 3600 : tf === '4h' ? 14400 : tf === '1d' ? 86400 : tf === '3d' ? 259200 : 604800
+        const lastBucket = Math.floor((prev[prev.length-1].time as number) / bucketSec) * bucketSec
+        const currBucket = Math.floor((ts as number) / bucketSec) * bucketSec
+        const updated = [...prev]
+        if (currBucket === lastBucket) {
+          const last = { ...updated[updated.length - 1] }
+          last.close = v
+          last.high = Math.max(last.high, v)
+          last.low = Math.min(last.low, v)
+          updated[updated.length - 1] = last
+          // persist
+          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${tf}`, JSON.stringify(updated)) } catch {}
+          return updated
+        }
+        // If we rolled into a new bucket, do nothing; cron history will backfill shortly
+        return updated
       })
     }
   }, [latestAns, latestTs])
@@ -237,19 +192,11 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     return () => { if (timer) clearInterval(timer) }
   }, [chainKey])
 
-  // Aggregate ticks to candles according to timeframe and update series
+  // Update series with pre-aggregated candles
   useEffect(() => {
     if (!seriesRef.current) return
-    const bucketSec = tf === '5m' ? 300
-      : tf === '15m' ? 900
-      : tf === '1h' ? 3600
-      : tf === '4h' ? 14400
-      : tf === '1d' ? 86400
-      : tf === '3d' ? 259200
-      : 604800
-    const candles = aggregateToCandles(ticks, bucketSec)
     seriesRef.current.setData(candles as any)
-  }, [ticks, tf])
+  }, [candles])
 
   return (
     <div className="card">
@@ -267,23 +214,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   )
 }
 
-function aggregateToCandles(points: Tick[], bucketSec: number): Candle[] {
-  if (!points.length) return []
-  const buckets = new Map<number, Candle>()
-  for (const p of points) {
-    const ts = p.time as number
-    const bucket = Math.floor(ts / bucketSec) * bucketSec
-    const existing = buckets.get(bucket)
-    if (!existing) {
-      buckets.set(bucket, { time: bucket as UTCTimestamp, open: p.value, high: p.value, low: p.value, close: p.value })
-    } else {
-      existing.high = Math.max(existing.high, p.value)
-      existing.low = Math.min(existing.low, p.value)
-      existing.close = p.value
-    }
-  }
-  return Array.from(buckets.entries()).sort((a,b)=>a[0]-b[0]).map(([,c])=>c)
-}
+// Aggregation removed from client; candles served from pre-aggregated JSON
 
 const queryClient = new QueryClient()
 

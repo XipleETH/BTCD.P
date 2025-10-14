@@ -86,6 +86,49 @@ async function main() {
   }
   fs.writeFileSync(outPath, JSON.stringify(out))
   console.log('Wrote history:', outPath, 'points=', trimmed.length)
+
+  // Also write pre-aggregated candles per timeframe for frontend consumption
+  type Candle = { time: number; open: number; high: number; low: number; close: number }
+  const aggregate = (points: Array<{time:number; value:number}>, bucketSec: number): Candle[] => {
+    if (!points.length) return []
+    const buckets = new Map<number, Candle>()
+    for (const p of points) {
+      const ts = Math.floor(p.time)
+      const bucket = Math.floor(ts / bucketSec) * bucketSec
+      const prev = buckets.get(bucket)
+      if (!prev) {
+        buckets.set(bucket, { time: bucket, open: p.value, high: p.value, low: p.value, close: p.value })
+      } else {
+        prev.high = Math.max(prev.high, p.value)
+        prev.low = Math.min(prev.low, p.value)
+        prev.close = p.value
+      }
+    }
+    return Array.from(buckets.entries()).sort((a,b)=>a[0]-b[0]).map(([,c])=>c)
+  }
+
+  const tfs: Array<{ key: string; sec: number; cap?: number }> = [
+    { key: '5m', sec: 300, cap: 4000 },
+    { key: '15m', sec: 900, cap: 4000 },
+    { key: '1h', sec: 3600, cap: 4000 },
+    { key: '4h', sec: 14400, cap: 4000 },
+    { key: '1d', sec: 86400, cap: 5000 },
+    { key: '3d', sec: 259200, cap: 5000 },
+    { key: '1w', sec: 604800, cap: 5000 },
+  ]
+  for (const tf of tfs) {
+    const candles = aggregate(trimmed, tf.sec)
+    const limited = tf.cap ? candles.slice(-tf.cap) : candles
+    const candleOutPath = path.join(outDir, `${chainKey}-candles-${tf.key}.json`)
+    const payload = {
+      chain: chainKey,
+      timeframe: tf.key,
+      updatedAt: new Date().toISOString(),
+      candles: limited,
+    }
+    fs.writeFileSync(candleOutPath, JSON.stringify(payload))
+    console.log(`Wrote candles: ${candleOutPath} candles=${limited.length}`)
+  }
 }
 
 main().catch((e)=>{ console.error(e); process.exit(1) })

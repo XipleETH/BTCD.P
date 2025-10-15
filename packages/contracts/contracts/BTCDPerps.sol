@@ -204,11 +204,15 @@ contract BTCDPerps {
         // positionSize = margin * leverage
         notional = pos.margin * pos.leverage;
         if (pos.entryPrice == 0) return (0, notional);
+        int256 diff = int256(price) - int256(pos.entryPrice); // signed difference
+        int256 base = int256(pos.entryPrice);
+        int256 n = int256(notional);
         if (pos.isLong) {
-            // pnl = notional * (price - entry) / entry
-            pnl = int256((notional * (price - pos.entryPrice)) / pos.entryPrice);
+            // long: positive if price > entry, negative if price < entry
+            pnl = (n * diff) / base;
         } else {
-            pnl = int256((notional * (pos.entryPrice - price)) / pos.entryPrice);
+            // short: inverse
+            pnl = (n * (-diff)) / base;
         }
     }
 }

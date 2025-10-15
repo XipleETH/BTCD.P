@@ -1,5 +1,5 @@
 # Runtime: Node 20 slim
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
 
@@ -10,14 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 COPY package.json package-lock.json ./
 COPY packages/contracts/package.json packages/contracts/package.json
 
-# Install only needed workspaces
-RUN npm ci --omit=dev && npm i --workspace packages/contracts --omit=dev --no-audit --no-fund
+# Install contracts workspace (including dev deps needed by Hardhat)
+RUN npm --workspace packages/contracts ci --no-audit --no-fund
 
 # Copy source
 COPY packages/contracts packages/contracts
 
 # Build contracts TS if needed (hardhat compile also sets types)
-RUN npx --yes hardhat --version && npm -w packages/contracts run build
+RUN npm -w packages/contracts exec hardhat --version && npm -w packages/contracts run build
 
 # Default envs
 ENV CG_INTERVAL_SEC=15 \

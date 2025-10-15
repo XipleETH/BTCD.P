@@ -4,6 +4,10 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+// Normalize PRIVATE_KEY: allow 64-hex without 0x and auto-prefix it
+const RAW_PK = (process.env.PRIVATE_KEY || "").trim();
+const PRIV_KEY = RAW_PK ? (RAW_PK.startsWith("0x") ? RAW_PK : ("0x" + RAW_PK)) : undefined;
+
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.24",
@@ -15,11 +19,11 @@ const config: HardhatUserConfig = {
     hardhat: {},
     baseSepolia: {
       url: process.env.BASE_SEPOLIA_RPC || "https://sepolia.base.org",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+      accounts: PRIV_KEY ? [PRIV_KEY] : []
     },
     base: {
       url: process.env.BASE_MAINNET_RPC || "https://mainnet.base.org",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+      accounts: PRIV_KEY ? [PRIV_KEY] : []
     }
   },
   etherscan: {

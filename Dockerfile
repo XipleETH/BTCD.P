@@ -24,5 +24,6 @@ ENV CG_INTERVAL_SEC=15 \
     MIN_CHANGE=0 \
     EXCLUDE_STABLES=true
 
-# Start daemon
-CMD ["npm", "-w", "packages/contracts", "run", "daemon:cg"]
+# Start daemon (selectable): set DAEMON=keepers to run keepers; default is price daemon
+ENV DAEMON=cg
+CMD ["bash", "-lc", "if [ \"$DAEMON\" = \"keepers\" ]; then npm -w packages/contracts run keepers; else npm -w packages/contracts run daemon:cg; fi"]

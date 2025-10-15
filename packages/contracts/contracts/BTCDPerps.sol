@@ -35,7 +35,8 @@ contract BTCDPerps {
 
     // Risk params
     uint256 public constant MAX_LEVERAGE = 150;
-    uint256 public maintenanceMarginRatioBps = 625; // 6.25%
+    // Maintenance margin ratio (in bps). Set to 0 to disable maintenance-based liquidation.
+    uint256 public maintenanceMarginRatioBps = 0; // default: no maintenance requirement
     uint256 public liquidationFeeBps = 50; // 0.50% of notional paid to liquidator
     uint256 public takerFeeBps = 10; // 0.10% of notional on open/close
 
@@ -49,6 +50,7 @@ contract BTCDPerps {
     receive() external payable {}
 
     function setParams(uint256 _mmBps, uint256 _liqFeeBps, uint256 _takerFeeBps) external onlyOwner {
+        // Allow 0 maintenance to disable maintenance-based liquidations; cap at 20%
         require(_mmBps <= 2000, "mm too high");
         require(_liqFeeBps <= 500, "fee too high");
         require(_takerFeeBps <= 100, "fee too high");
@@ -109,6 +111,10 @@ contract BTCDPerps {
         uint256 price = getPrice();
         (int256 pnl, uint256 notional) = _calcPnl(pos, price);
         int256 equity = int256(pos.margin) + pnl;
+        // If maintenance is disabled (0), only allow liquidation when equity <= 0 (margin fully depleted)
+        if (maintenanceMarginRatioBps == 0) {
+            return equity <= 0;
+        }
         int256 maintenance = int256((notional * maintenanceMarginRatioBps) / 10000);
         return equity <= maintenance;
     }

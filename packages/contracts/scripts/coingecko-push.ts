@@ -19,12 +19,53 @@ async function fetchBTCD(): Promise<number> {
       if (!arr.length) throw new Error('Empty markets array')
       let total = 0
       let btc = 0
+
+      // Stable exclusion config
+      const excludeStables = String(process.env.EXCLUDE_STABLES || '').toLowerCase() === 'true'
+      const extraExcludes = new Set(
+        (process.env.EXCLUDE_IDS || '')
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean)
+      )
+      const knownStables = new Set<string>([
+        'tether', // USDT
+        'usd-coin', // USDC
+        'binance-usd', // BUSD (legacy)
+        'dai',
+        'frax',
+        'true-usd', // TUSD
+        'usdd',
+        'pax-dollar', // USDP
+        'first-digital-usd', // FDUSD
+        'gemini-dollar', // GUSD
+        'liquity-usd', // LUSD
+        'ethena-usde', // USDe
+        'usdx', 'usdk', 'usdn', 'usdy',
+      ])
+
+      function isProbablyStable(it: any): boolean {
+        const id = String(it?.id || '').toLowerCase()
+        if (extraExcludes.has(id)) return true
+        if (knownStables.has(id)) return true
+        if (!excludeStables) return false
+        const sym = String(it?.symbol || '').toUpperCase()
+        const price = Number(it?.current_price)
+        if (Number.isFinite(price) && price > 0) {
+          // Heuristic: symbols containing USD and price near $1
+          if (sym.includes('USD') && price > 0.94 && price < 1.06) return true
+        }
+        return false
+      }
       for (const it of arr) {
         const mc = Number(it?.market_cap)
         if (Number.isFinite(mc) && mc > 0) {
-          total += mc
           const id = String(it?.id || '')
           if (id === 'bitcoin') btc = mc
+          // Include BTC and non-stable assets in denominator; optionally exclude stables
+          if (!excludeStables || id === 'bitcoin' || !isProbablyStable(it)) {
+            total += mc
+          }
         }
       }
       if (total <= 0 || btc <= 0) throw new Error('Invalid market caps')

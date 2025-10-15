@@ -6,7 +6,6 @@
   },
   "deploy": {
     "startCommand": "",
-    "healthcheckPath": "/",
     "restartPolicyType": "ON_FAILURE"
   }
 }

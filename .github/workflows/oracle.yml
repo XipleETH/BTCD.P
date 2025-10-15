@@ -55,6 +55,9 @@ jobs:
           export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
           export MIN_CHANGE=${{ vars.MIN_CHANGE_BTCD || '0' }}
           export FORCE_MAX_AGE_SEC=${{ vars.FORCE_MAX_AGE_SEC || '60' }}
+          export EXCLUDE_STABLES=${{ vars.EXCLUDE_STABLES || 'false' }}
+          export EXCLUDE_IDS=${{ vars.EXCLUDE_IDS || '' }}
+          export DEBUG_ORACLE=${{ vars.DEBUG_ORACLE || 'false' }}
           npm -w packages/contracts run push:cg
         env:
           # For hardhat network resolution
@@ -63,6 +66,9 @@ jobs:
           BASE_SEPOLIA_RPC: ${{ secrets.BASE_SEPOLIA_RPC }}
           MIN_CHANGE: ${{ vars.MIN_CHANGE_BTCD }}
           FORCE_MAX_AGE_SEC: ${{ vars.FORCE_MAX_AGE_SEC }}
+          EXCLUDE_STABLES: ${{ vars.EXCLUDE_STABLES }}
+          EXCLUDE_IDS: ${{ vars.EXCLUDE_IDS }}
+          DEBUG_ORACLE: ${{ vars.DEBUG_ORACLE }}
       - name: Sync latest tick to DB
         run: |
           export ORACLE=${{ secrets.ORACLE_ADDRESS }}

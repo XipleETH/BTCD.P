@@ -15,7 +15,7 @@ async function fetchBTCD(): Promise<number> {
         headers: { 'User-Agent': 'BTCD-Oracle/1.0 (+github actions)' },
         timeout: 15000,
       })
-      const arr = Array.isArray(resp.data) ? resp.data : []
+  const arr = Array.isArray(resp.data) ? resp.data : []
       if (!arr.length) throw new Error('Empty markets array')
       let total = 0
       let btc = 0
@@ -57,6 +57,8 @@ async function fetchBTCD(): Promise<number> {
         }
         return false
       }
+      let excludedCount = 0
+      let includedCount = 0
       for (const it of arr) {
         const mc = Number(it?.market_cap)
         if (Number.isFinite(mc) && mc > 0) {
@@ -65,11 +67,17 @@ async function fetchBTCD(): Promise<number> {
           // Include BTC and non-stable assets in denominator; optionally exclude stables
           if (!excludeStables || id === 'bitcoin' || !isProbablyStable(it)) {
             total += mc
+            includedCount++
+          } else {
+            excludedCount++
           }
         }
       }
       if (total <= 0 || btc <= 0) throw new Error('Invalid market caps')
       const pct = (btc / total) * 100
+      if (String(process.env.DEBUG_ORACLE || '').toLowerCase() === 'true') {
+        console.log(`DEBUG markets: included=${includedCount} excluded=${excludedCount} btc=${btc} total=${total} pct=${pct}`)
+      }
       return pct
     } catch (e: any) {
       const status = e?.response?.status
@@ -88,6 +96,9 @@ async function fetchBTCD(): Promise<number> {
           })
           const pct2 = resp2.data?.data?.market_cap_percentage?.btc
           if (typeof pct2 !== 'number') throw new Error('Invalid response from CoinGecko /global')
+          if (String(process.env.DEBUG_ORACLE || '').toLowerCase() === 'true') {
+            console.log(`DEBUG fallback /global used: pct=${pct2}`)
+          }
           return pct2
         } catch (e2) {
           throw e

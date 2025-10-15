@@ -20,8 +20,11 @@ function getChain(): string {
 async function fetchBTCD(): Promise<number> {
   // Preferred: compute from top-250 markets
   const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1'
+  const headers: Record<string, string> = { 'User-Agent': 'BTCD-Daemon/1.1' }
+  const apiKey = (process.env.CG_API_KEY || '').trim()
+  if (apiKey) headers['x-cg-pro-api-key'] = apiKey
   try {
-    const resp = await axios.get(url, { headers: { 'User-Agent': 'BTCD-Daemon/1.0' }, timeout: 15000 })
+    const resp = await axios.get(url, { headers, timeout: 15000 })
     const arr = Array.isArray(resp.data) ? resp.data : []
     if (!arr.length) throw new Error('Empty markets array')
     const excludeStables = String(process.env.EXCLUDE_STABLES || '').toLowerCase() === 'true'
@@ -64,7 +67,10 @@ async function fetchBTCD(): Promise<number> {
     return pct
   } catch (e) {
     // Fallback to /global
-    const resp = await axios.get('https://api.coingecko.com/api/v3/global', { headers: { 'User-Agent': 'BTCD-Daemon/1.0' }, timeout: 10000 })
+    const headers2: Record<string, string> = { 'User-Agent': 'BTCD-Daemon/1.1' }
+    const apiKey2 = (process.env.CG_API_KEY || '').trim()
+    if (apiKey2) headers2['x-cg-pro-api-key'] = apiKey2
+    const resp = await axios.get('https://api.coingecko.com/api/v3/global', { headers: headers2, timeout: 10000 })
     const pct = resp.data?.data?.market_cap_percentage?.btc
     if (typeof pct !== 'number') throw new Error('Invalid response from CoinGecko /global')
     if (String(process.env.DEBUG_ORACLE || '').toLowerCase() === 'true') {
@@ -121,13 +127,20 @@ async function main() {
       last = { v }
     } catch (e: any) {
       const status = e?.response?.status
-      const backoff = status === 429 ? Math.min(intervalSec * 2, 600) : Math.max(5, Math.floor(intervalSec/2))
+      let backoff: number
+      if (status === 429) {
+        const ra = parseInt((e?.response?.headers?.['retry-after'] ?? e?.response?.headers?.['Retry-After']) as string)
+        const hinted = Number.isFinite(ra) ? ra : intervalSec * 2
+        backoff = Math.max(20, Math.min(hinted, 600))
+      } else {
+        backoff = Math.max(5, Math.floor(intervalSec/2))
+      }
       console.error('tick error', e?.message || e)
       await new Promise(r => setTimeout(r, backoff*1000))
       continue
     }
-    // jitter +/- 10%
-    const jitter = Math.floor(intervalSec * (0.9 + Math.random()*0.2))
+    // jitter 80% - 140%
+    const jitter = Math.floor(intervalSec * (0.8 + Math.random()*0.6))
     await new Promise(r => setTimeout(r, jitter*1000))
   }
 }

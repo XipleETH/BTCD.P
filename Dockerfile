@@ -20,7 +20,7 @@ COPY packages/contracts packages/contracts
 RUN npm -w packages/contracts exec hardhat --version && npm -w packages/contracts run build
 
 # Default envs
-ENV CG_INTERVAL_SEC=15 \
+ENV CG_INTERVAL_SEC=30 \
     MIN_CHANGE=0 \
     EXCLUDE_STABLES=true
 

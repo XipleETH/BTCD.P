@@ -9,6 +9,9 @@ jobs:
   push-btcd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: btcd-oracle-push
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,6 +27,12 @@ jobs:
 
       - name: Install deps (contracts)
         run: npm i --workspace packages/contracts --no-audit --no-fund
+      - name: Jitter to avoid API bursts
+        shell: bash
+        run: |
+          S=$((RANDOM % 20))
+          echo "Sleeping ${S}s to jitter requests"
+          sleep ${S}
 
       - name: Compile contracts
         run: npm -w packages/contracts run build
@@ -45,7 +54,7 @@ jobs:
           export PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           export BASE_SEPOLIA_RPC=${{ secrets.BASE_SEPOLIA_RPC }}
           export MIN_CHANGE=${{ vars.MIN_CHANGE_BTCD || '0' }}
-          export FORCE_MAX_AGE_SEC=${{ vars.FORCE_MAX_AGE_SEC || '1800' }}
+          export FORCE_MAX_AGE_SEC=${{ vars.FORCE_MAX_AGE_SEC || '60' }}
           npm -w packages/contracts run push:cg
         env:
           # For hardhat network resolution

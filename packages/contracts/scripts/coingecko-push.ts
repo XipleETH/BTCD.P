@@ -9,20 +9,49 @@ async function fetchBTCD(): Promise<number> {
   let delay = 1000
   for (let i = 1; i <= maxAttempts; i++) {
     try {
-      const resp = await axios.get('https://api.coingecko.com/api/v3/global', {
+      // Preferred: compute using top-250 markets
+      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1'
+      const resp = await axios.get(url, {
         headers: { 'User-Agent': 'BTCD-Oracle/1.0 (+github actions)' },
-        timeout: 10000,
+        timeout: 15000,
       })
-      const pct = resp.data?.data?.market_cap_percentage?.btc
-      if (typeof pct !== 'number') throw new Error('Invalid response from CoinGecko')
-      return pct // e.g., 60.12
+      const arr = Array.isArray(resp.data) ? resp.data : []
+      if (!arr.length) throw new Error('Empty markets array')
+      let total = 0
+      let btc = 0
+      for (const it of arr) {
+        const mc = Number(it?.market_cap)
+        if (Number.isFinite(mc) && mc > 0) {
+          total += mc
+          const id = String(it?.id || '')
+          if (id === 'bitcoin') btc = mc
+        }
+      }
+      if (total <= 0 || btc <= 0) throw new Error('Invalid market caps')
+      const pct = (btc / total) * 100
+      return pct
     } catch (e: any) {
       const status = e?.response?.status
       const msg = e?.message || String(e)
-      console.error(`fetchBTCD attempt ${i} failed:`, status || '', msg)
+      console.warn(`fetchBTCD markets attempt ${i} failed:`, status || '', msg)
       if (status === 429) delay = Math.min(delay * 2, 15000)
-      if (i < maxAttempts) await new Promise(r => setTimeout(r, delay))
-      else throw e
+      if (i < maxAttempts) {
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      } else {
+        // Final fallback: use /global endpoint
+        try {
+          const resp2 = await axios.get('https://api.coingecko.com/api/v3/global', {
+            headers: { 'User-Agent': 'BTCD-Oracle/1.0 (+github actions)' },
+            timeout: 10000,
+          })
+          const pct2 = resp2.data?.data?.market_cap_percentage?.btc
+          if (typeof pct2 !== 'number') throw new Error('Invalid response from CoinGecko /global')
+          return pct2
+        } catch (e2) {
+          throw e
+        }
+      }
     }
   }
   throw new Error('unreachable')

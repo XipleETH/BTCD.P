@@ -1,8 +1,21 @@
 import axios from 'axios'
 import * as dotenv from 'dotenv'
-import { ethers, network } from 'hardhat'
 
 dotenv.config()
+
+async function lazyHardhat() {
+  // Lazy import hardhat only when we actually need to push on-chain
+  const hh = await import('hardhat')
+  return hh
+}
+
+function getChain(): string {
+  // Prefer explicit CHAIN env (e.g., "base-sepolia" or "base").
+  const fromEnv = (process.env.CHAIN || '').trim()
+  if (fromEnv) return fromEnv
+  // Fallback default when not pushing on-chain
+  return 'base-sepolia'
+}
 
 async function fetchBTCD(): Promise<number> {
   // Preferred: compute from top-250 markets
@@ -61,7 +74,7 @@ async function fetchBTCD(): Promise<number> {
   }
 }
 
-async function runOnce(oracleAddr: string, last?: { v: number }): Promise<number> {
+async function runOnce(oracleAddr: string | undefined, last?: { v: number }): Promise<number> {
   const pct = await fetchBTCD()
   const minChange = Number(process.env.MIN_CHANGE || '0') // in percentage points, e.g. 0.01 = 1bp
   const nowSec = Math.floor(Date.now()/1000)
@@ -70,18 +83,24 @@ async function runOnce(oracleAddr: string, last?: { v: number }): Promise<number
     const ingestUrl = process.env.INGEST_URL
     const ingestSecret = process.env.INGEST_SECRET
     if (ingestUrl && ingestSecret) {
-      const chain = (network.name === 'baseSepolia') ? 'base-sepolia' : (network.name === 'base' ? 'base' : network.name)
+      const chain = getChain()
       await axios.post(ingestUrl, { secret: ingestSecret, chain, time: nowSec, value: pct }, { timeout: 8000 })
     }
   } catch (e: any) {
     console.warn('ingest sync failed', e?.message || e)
   }
+  if (!oracleAddr) {
+    console.log(new Date().toISOString(), 'DB-only mode: ORACLE not set; synced tick', pct.toFixed(6), '%')
+    return pct
+  }
   if (last && Math.abs(pct - last.v) < minChange) {
     console.log(new Date().toISOString(), 'no significant change', pct.toFixed(6), '% (minChange', minChange, ')')
     return last.v
   }
+  const { ethers } = await lazyHardhat()
   const priceScaled = ethers.parseUnits(pct.toFixed(8), 8)
-  const oracle = await ethers.getContractAt('BTCDOracle', oracleAddr)
+  const { ethers: _ethers, network } = await lazyHardhat()
+  const oracle = await _ethers.getContractAt('BTCDOracle', oracleAddr)
   const tx = await oracle.pushPrice(priceScaled)
   console.log(new Date().toISOString(), 'BTC.D', pct.toFixed(6), '% tx=', tx.hash)
   await tx.wait()
@@ -89,9 +108,11 @@ async function runOnce(oracleAddr: string, last?: { v: number }): Promise<number
 }
 
 async function main() {
-  const oracleAddr = process.env.ORACLE
+  const oracleAddr = (process.env.ORACLE || '').trim() || undefined
   const intervalSec = Number(process.env.CG_INTERVAL_SEC || '300')
-  if (!oracleAddr) throw new Error('Set ORACLE in .env')
+  if (!oracleAddr) {
+    console.warn('ORACLE not set: running in DB-only mode (no on-chain pushes). Set ORACLE to enable on-chain updates.')
+  }
   // eslint-disable-next-line no-constant-condition
   let last: { v: number } | undefined = undefined
   while (true) {

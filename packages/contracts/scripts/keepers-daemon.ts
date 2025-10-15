@@ -23,6 +23,7 @@ async function main() {
   const START_BLOCK = process.env.START_BLOCK ? Number(process.env.START_BLOCK) : undefined
   const MAX_TX_PER_LOOP = Number(process.env.MAX_TX_PER_LOOP || '5')
   const GAS_LIMIT = process.env.GAS_LIMIT ? BigInt(process.env.GAS_LIMIT) : undefined
+  const SCAN_CHUNK = Number(process.env.SCAN_CHUNK || '2000')
 
   let open = new Set<string>()
   let lastScan = 0
@@ -33,8 +34,27 @@ async function main() {
     lastScan = START_BLOCK - 1
   } else {
     const latest = await provider.getBlockNumber()
-    // Default: go back some blocks to reconstruct open positions
-    lastScan = Math.max(0, latest - 200_000)
+    // Default: go back a modest window to reconstruct (tunable)
+    lastScan = Math.max(0, latest - 20_000)
+  }
+
+  async function getWithRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+    let attempt = 0
+    while (true) {
+      try {
+        return await fn()
+      } catch (e: any) {
+        attempt++
+        const msg = e?.shortMessage || e?.message || String(e)
+        if (DEBUG) console.warn(`${label} failed (attempt ${attempt})`, msg)
+        // Detect provider backend hiccups or rate limits, backoff
+        const lower = msg.toLowerCase()
+        const isHiccup = lower.includes('no backend is currently healthy') || lower.includes('429') || lower.includes('rate')
+        const backoff = isHiccup ? Math.min(5 * attempt, 30) : Math.min(2 * attempt, 10)
+        await sleep(backoff * 1000)
+        if (attempt >= 5) throw e
+      }
+    }
   }
 
   async function scanNewLogs() {
@@ -44,33 +64,38 @@ async function main() {
     if (toBlock <= lastScan) return
     const fromBlock = lastScan + 1
     try {
-      if (DEBUG) console.log(`Scanning logs ${fromBlock} -> ${toBlock}`)
-      // Use typed event queries
-      const posOpened = await perps.queryFilter(perps.filters.PositionOpened as any, fromBlock, toBlock)
-      const posClosed = await perps.queryFilter(perps.filters.PositionClosed as any, fromBlock, toBlock)
-      const liqs = await perps.queryFilter(perps.filters.Liquidated as any, fromBlock, toBlock)
-      const stopClosed = await perps.queryFilter(perps.filters.StopClosed as any, fromBlock, toBlock)
+      if (DEBUG) console.log(`Scanning logs ${fromBlock} -> ${toBlock} (chunk ${SCAN_CHUNK})`)
+      const addOpen = (t: string) => { if (/^0x[0-9a-f]{40}$/.test(t)) open.add(t) }
+      const removeOpen = (t: string) => { if (open.has(t)) open.delete(t) }
 
-      for (const ev of posOpened) {
-        const anyEv: any = ev as any
-        const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
-        if (/^0x[0-9a-f]{40}$/.test(trader)) open.add(trader)
-      }
-      const removeTrader = (addr: string) => { if (open.has(addr)) open.delete(addr) }
-      for (const ev of posClosed) {
-        const anyEv: any = ev as any
-        const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
-        if (/^0x[0-9a-f]{40}$/.test(trader)) removeTrader(trader)
-      }
-      for (const ev of liqs) {
-        const anyEv: any = ev as any
-        const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
-        if (/^0x[0-9a-f]{40}$/.test(trader)) removeTrader(trader)
-      }
-      for (const ev of stopClosed) {
-        const anyEv: any = ev as any
-        const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
-        if (/^0x[0-9a-f]{40}$/.test(trader)) removeTrader(trader)
+      for (let start = fromBlock; start <= toBlock; start += SCAN_CHUNK) {
+        const end = Math.min(start + SCAN_CHUNK - 1, toBlock)
+        const [posOpened, posClosed, liqs, stopClosed] = await Promise.all([
+          getWithRetry(() => perps.queryFilter(perps.filters.PositionOpened as any, start, end), 'PositionOpened'),
+          getWithRetry(() => perps.queryFilter(perps.filters.PositionClosed as any, start, end), 'PositionClosed'),
+          getWithRetry(() => perps.queryFilter(perps.filters.Liquidated as any, start, end), 'Liquidated'),
+          getWithRetry(() => perps.queryFilter(perps.filters.StopClosed as any, start, end), 'StopClosed'),
+        ])
+        for (const ev of posOpened) {
+          const anyEv: any = ev as any
+          const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
+          addOpen(trader)
+        }
+        for (const ev of posClosed) {
+          const anyEv: any = ev as any
+          const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
+          removeOpen(trader)
+        }
+        for (const ev of liqs) {
+          const anyEv: any = ev as any
+          const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
+          removeOpen(trader)
+        }
+        for (const ev of stopClosed) {
+          const anyEv: any = ev as any
+          const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
+          removeOpen(trader)
+        }
       }
       lastScan = toBlock
       lastScanAt = now
@@ -78,7 +103,7 @@ async function main() {
     } catch (e: any) {
       console.warn('scan logs error', e?.message || e)
       // back off next scan
-      lastScanAt = now - (SCAN_EVERY_SEC * 1000 - 5000)
+      lastScanAt = now - Math.max(0, (SCAN_EVERY_SEC * 1000 - 5000))
     }
   }
 

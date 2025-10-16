@@ -24,6 +24,7 @@ async function main() {
   const MAX_TX_PER_LOOP = Number(process.env.MAX_TX_PER_LOOP || '5')
   const GAS_LIMIT = process.env.GAS_LIMIT ? BigInt(process.env.GAS_LIMIT) : undefined
   const SCAN_CHUNK = Number(process.env.SCAN_CHUNK || '2000')
+  const LOOKBACK_BLOCKS = Number(process.env.LOOKBACK_BLOCKS || '20000')
 
   let open = new Set<string>()
   let lastScan = 0
@@ -34,8 +35,8 @@ async function main() {
     lastScan = START_BLOCK - 1
   } else {
     const latest = await provider.getBlockNumber()
-    // Default: go back a modest window to reconstruct (tunable)
-    lastScan = Math.max(0, latest - 20_000)
+    // Default: go back a tunable window to reconstruct
+    lastScan = Math.max(0, latest - LOOKBACK_BLOCKS)
   }
 
   async function getWithRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
@@ -70,11 +71,12 @@ async function main() {
 
       for (let start = fromBlock; start <= toBlock; start += SCAN_CHUNK) {
         const end = Math.min(start + SCAN_CHUNK - 1, toBlock)
-        const [posOpened, posClosed, liqs, stopClosed] = await Promise.all([
+        const [posOpened, posClosed, liqs, stopClosed, stopsUpd] = await Promise.all([
           getWithRetry(() => perps.queryFilter(perps.filters.PositionOpened as any, start, end), 'PositionOpened'),
           getWithRetry(() => perps.queryFilter(perps.filters.PositionClosed as any, start, end), 'PositionClosed'),
           getWithRetry(() => perps.queryFilter(perps.filters.Liquidated as any, start, end), 'Liquidated'),
           getWithRetry(() => perps.queryFilter(perps.filters.StopClosed as any, start, end), 'StopClosed'),
+          getWithRetry(() => perps.queryFilter(perps.filters.StopsUpdated as any, start, end), 'StopsUpdated'),
         ])
         for (const ev of posOpened) {
           const anyEv: any = ev as any
@@ -95,6 +97,11 @@ async function main() {
           const anyEv: any = ev as any
           const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
           removeOpen(trader)
+        }
+        for (const ev of stopsUpd) {
+          const anyEv: any = ev as any
+          const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '').toLowerCase()
+          addOpen(trader)
         }
       }
       lastScan = toBlock

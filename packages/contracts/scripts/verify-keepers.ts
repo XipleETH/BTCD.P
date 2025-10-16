@@ -40,11 +40,12 @@ async function main() {
   const removeOpen = (t: string) => { open.delete(t.toLowerCase()) }
   for (let start = lastScan + 1; start <= latestBlock; start += SCAN_CHUNK) {
     const end = Math.min(start + SCAN_CHUNK - 1, latestBlock)
-    const [posOpened, posClosed, liqs, stopClosed] = await Promise.all([
+    const [posOpened, posClosed, liqs, stopClosed, stopsUpd] = await Promise.all([
       perps.queryFilter(perps.filters.PositionOpened as any, start, end),
       perps.queryFilter(perps.filters.PositionClosed as any, start, end),
       perps.queryFilter(perps.filters.Liquidated as any, start, end),
       perps.queryFilter(perps.filters.StopClosed as any, start, end),
+      perps.queryFilter(perps.filters.StopsUpdated as any, start, end),
     ])
     for (const ev of posOpened) {
       const anyEv: any = ev as any
@@ -66,12 +67,17 @@ async function main() {
       const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '')
       removeOpen(trader)
     }
+    for (const ev of stopsUpd) {
+      const anyEv: any = ev as any
+      const trader = String(anyEv?.args?.trader || anyEv?.args?.[0] || anyEv?.topics?.[1] || '')
+      addOpen(trader)
+    }
   }
 
   console.log(`Open traders detected: ${open.size}`)
   const traders = Array.from(open)
   if (!traders.length) {
-    console.log('No open positions found in scanned range.')
+    console.log('No open positions found in scanned range. If you recently opened positions, increase LOOKBACK range or set START_BLOCK env to include those blocks.')
   }
 
   // Inspect each open trader for SL/TP and liquidation readiness

@@ -51,9 +51,42 @@ import { createChart, ColorType, Time, IChartApi, ISeriesApi, UTCTimestamp } fro
 type Tick = { time: UTCTimestamp, value: number }
 type Candle = { time: UTCTimestamp, open: number, high: number, low: number, close: number }
 
+// Helper: timeframe seconds
+function tfSeconds(tf: '5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'): number {
+  switch (tf) {
+    case '5m': return 300
+    case '15m': return 900
+    case '1h': return 3600
+    case '4h': return 14400
+    case '1d': return 86400
+    case '3d': return 259200
+    case '1w': return 604800
+  }
+}
+
+// Ensure continuity: each candle opens where the previous closed
+function normalizeContinuity(cs: Candle[]): Candle[] {
+  if (!cs?.length) return cs
+  const out: Candle[] = [ { ...cs[0] } ]
+  for (let i=1;i<cs.length;i++) {
+    const prev = out[i-1]
+    const curr = { ...cs[i] }
+    const desiredOpen = prev.close
+    if (Math.abs(curr.open - desiredOpen) > 1e-9) {
+      curr.open = desiredOpen
+      // keep high/low inclusive of new open
+      curr.high = Math.max(curr.high, curr.open)
+      curr.low = Math.min(curr.low, curr.open)
+    }
+    out.push(curr)
+  }
+  return out
+}
+
 function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
   const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
+  const [remaining, setRemaining] = useState<number>(0)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const containerId = 'chart_container'
@@ -79,7 +112,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
             if (Array.isArray(arr)) {
               const cs: Candle[] = arr.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
               cs.sort((a,b)=>a.time-b.time)
-              if (!cancelled) setCandles(cs)
+              if (!cancelled) setCandles(normalizeContinuity(cs))
             }
           }
         } catch {}
@@ -90,8 +123,9 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           if (Array.isArray(j.candles)) {
             const cs: Candle[] = j.candles.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
             cs.sort((a,b)=>a.time-b.time)
-            if (!cancelled) setCandles(cs)
-            try { localStorage.setItem(lsKey, JSON.stringify(cs)) } catch {}
+            const norm = normalizeContinuity(cs)
+            if (!cancelled) setCandles(norm)
+            try { localStorage.setItem(lsKey, JSON.stringify(norm)) } catch {}
           }
         }
       } catch (e) {
@@ -117,8 +151,9 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           if (Array.isArray(j.candles)) {
             const cs: Candle[] = j.candles.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
             cs.sort((a,b)=>a.time-b.time)
-            setCandles(cs)
-            try { localStorage.setItem(lsKey, JSON.stringify(cs)) } catch {}
+            const norm = normalizeContinuity(cs)
+            setCandles(norm)
+            try { localStorage.setItem(lsKey, JSON.stringify(norm)) } catch {}
           }
         }
       } catch {}
@@ -148,7 +183,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
       // Update only the last candle's close/high/low based on live price; we don't append a new candle here
       setCandles(prev => {
         if (!prev.length) return prev
-        const bucketSec = tf === '5m' ? 300 : tf === '15m' ? 900 : tf === '1h' ? 3600 : tf === '4h' ? 14400 : tf === '1d' ? 86400 : tf === '3d' ? 259200 : 604800
+        const bucketSec = tfSeconds(tf)
         const lastBucket = Math.floor((prev[prev.length-1].time as number) / bucketSec) * bucketSec
         const currBucket = Math.floor((ts as number) / bucketSec) * bucketSec
         const updated = [...prev]
@@ -162,7 +197,16 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${tf}`, JSON.stringify(updated)) } catch {}
           return updated
         }
-        // If we rolled into a new bucket, do nothing; cron history will backfill shortly
+        // Rolled into a new bucket: start a new candle that opens at previous close
+        if (currBucket > lastBucket) {
+          const prevLast = updated[updated.length - 1]
+          const open = prevLast.close
+          const nc: Candle = { time: currBucket as UTCTimestamp, open, high: Math.max(open, v), low: Math.min(open, v), close: v }
+          updated.push(nc)
+          // persist
+          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${tf}`, JSON.stringify(updated)) } catch {}
+          return updated
+        }
         return updated
       })
     }
@@ -177,7 +221,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
       height: 480,
       layout: { background: { type: ColorType.Solid, color: '#0b1221' }, textColor: '#DDD' },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
     })
     chartRef.current = chart as any
     const series = chart.addCandlestickSeries({ upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' })
@@ -195,6 +239,28 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     seriesRef.current.setData(candles as any)
   }, [candles])
 
+  // Countdown: update remaining seconds for current candle and display as overlay
+  useEffect(() => {
+    let id: number | undefined
+    const loop = () => {
+      try {
+        if (candles.length) {
+          const last = candles[candles.length - 1]
+          const now = Math.floor(Date.now() / 1000)
+          const bucket = tfSeconds(tf)
+          const end = (Math.floor((last.time as number) / bucket) * bucket) + bucket
+          const rem = Math.max(0, end - now)
+          setRemaining(rem)
+        } else {
+          setRemaining(0)
+        }
+      } catch { setRemaining(0) }
+      id = window.setTimeout(loop, 1000)
+    }
+    id = window.setTimeout(loop, 1000)
+    return () => { if (id) window.clearTimeout(id) }
+  }, [candles, tf])
+
   return (
     <div className="card">
       <div className="card-header">
@@ -205,7 +271,12 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
         </div>
       </div>
       <div className="card-body p0">
-        <div id={containerId} className="chart" />
+        <div style={{ position:'relative' }}>
+          <div id={containerId} className="chart" />
+          <div style={{ position:'absolute', top:8, right:12, background:'#0b1221cc', border:'1px solid #243045', padding:'4px 8px', borderRadius:6, fontSize:12 }}>
+            {remaining > 0 ? `Cierra en ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}` : 'Nueva vela'}
+          </div>
+        </div>
       </div>
     </div>
   )

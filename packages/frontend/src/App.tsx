@@ -87,8 +87,11 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
+  const [overlayTop, setOverlayTop] = useState<number>(8)
+  const [livePrice, setLivePrice] = useState<number | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const chartWrapRef = useRef<HTMLDivElement | null>(null)
   const containerId = 'chart_container'
 
   // Build history from on-chain events and then poll live values
@@ -180,6 +183,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     if (typeof latestAns === 'bigint' && typeof latestTs === 'bigint') {
       const v = Number(formatUnits(latestAns, 8))
       const ts = Number(latestTs) as UTCTimestamp
+      setLivePrice(v)
       // Update only the last candle's close/high/low based on live price; we don't append a new candle here
       setCandles(prev => {
         if (!prev.length) return prev
@@ -211,6 +215,22 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
       })
     }
   }, [latestAns, latestTs])
+
+  // Position the timer label just below the current price on the right, like TradingView
+  useEffect(() => {
+    const el = chartWrapRef.current
+    const series = seriesRef.current
+    if (!el || !series) return
+    const price = (typeof livePrice === 'number' && !Number.isNaN(livePrice))
+      ? livePrice
+      : (candles.length ? candles[candles.length-1].close : null)
+    if (price === null) { setOverlayTop(8); return }
+    const y = series.priceToCoordinate(price)
+    const h = el.clientHeight || 480
+    const top = y !== null && y !== undefined ? y + 18 : 8
+    const clamped = Math.min(Math.max(top, 6), h - 46)
+    setOverlayTop(clamped)
+  }, [livePrice, candles, tf])
 
   // Initialize chart once
   useEffect(() => {
@@ -271,10 +291,11 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
         </div>
       </div>
       <div className="card-body p0">
-        <div style={{ position:'relative' }}>
+        <div ref={chartWrapRef} style={{ position:'relative' }}>
           <div id={containerId} className="chart" />
-          <div style={{ position:'absolute', top:8, right:12, background:'#0b1221cc', border:'1px solid #243045', padding:'4px 8px', borderRadius:6, fontSize:12 }}>
-            {remaining > 0 ? `Cierra en ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}` : 'Nueva vela'}
+          <div style={{ position:'absolute', top: overlayTop, right: 6, background:'#fff', color:'#111', border:'1px solid #d1d5db', boxShadow:'0 1px 3px rgba(0,0,0,0.25)', padding:'4px 8px', borderRadius:4, fontSize:12, lineHeight:1.15, fontWeight:600, minWidth:64, textAlign:'right' }}>
+            <div>{(typeof livePrice === 'number' ? livePrice : (candles[candles.length-1]?.close ?? 0)).toFixed(2)}%</div>
+            <div style={{ fontWeight:500 }}>{`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`}</div>
           </div>
         </div>
       </div>

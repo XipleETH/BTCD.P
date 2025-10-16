@@ -1,10 +1,6 @@
 import * as dotenv from 'dotenv'
 dotenv.config()
-
-async function lazyHardhat() {
-  const hh = await import('hardhat')
-  return hh
-}
+import { ethers } from 'hardhat'
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -12,7 +8,6 @@ async function main() {
   const PERPS = (process.env.PERPS || '').trim()
   if (!PERPS) throw new Error('Set PERPS=0x... (BTCDPerps) in env')
 
-  const { ethers } = await lazyHardhat()
   const provider = ethers.provider
   const [signer] = await ethers.getSigners()
   const perps = await ethers.getContractAt('BTCDPerps', PERPS, signer)
@@ -85,22 +80,47 @@ async function main() {
     try {
       const pos = await perps.positions(addr)
       if (!pos.isOpen) continue
+  const takerFeeBps: bigint = await perps.takerFeeBps()
+  const perpsBal = await ethers.provider.getBalance(PERPS)
+  const latestAns: bigint = await (perps as any).getPrice()
       const [sl, tp] = await perps.getStops(addr)
       const [trig, hitSl, hitTp] = await perps.shouldClose(addr)
       const canLiq = await perps.canLiquidate(addr)
       // Compute quick stats
-      const isLong: boolean = Boolean(pos.isLong)
-      const lev = Number(pos.leverage)
+  const isLong: boolean = Boolean(pos.isLong)
+  const levNum = Number(pos.leverage)
       const marginEth = Number(ethers.formatEther(pos.margin))
       const entryPct = Number(pos.entryPrice) / 1e8
       const slPct = sl ? Number(sl) / 1e8 : 0
       const tpPct = tp ? Number(tp) / 1e8 : 0
 
+      // Estimate payout if closing now
+  const margin = pos.margin as bigint
+  const levBig = pos.leverage as bigint
+  const notional = margin * levBig
+      const fee = (notional * takerFeeBps) / 10000n
+      const entry = pos.entryPrice as bigint
+      const price = latestAns
+      let pnl = 0n
+      if (entry !== 0n) {
+        const diff = price - entry
+        const n = notional
+        if (pos.isLong) {
+          pnl = (n * diff) / entry
+        } else {
+          pnl = (n * (-diff)) / entry
+        }
+      }
+      const settle = (margin as bigint) + pnl - fee
+      const payout = settle <= 0n ? 0n : settle
+      const insuff = payout > perpsBal
+
       console.log('—')
       console.log(`Trader: ${addr}`)
-      console.log(`  Open: ${pos.isOpen}  Side: ${isLong ? 'LONG':'SHORT'}  Lev: x${lev}  Margin: ${marginEth.toFixed(6)} ETH  Entry: ${entryPct.toFixed(4)}%`)
+  console.log(`  Open: ${pos.isOpen}  Side: ${isLong ? 'LONG':'SHORT'}  Lev: x${levNum}  Margin: ${marginEth.toFixed(6)} ETH  Entry: ${entryPct.toFixed(4)}%`)
       console.log(`  Stops: SL ${sl ? slPct.toFixed(4)+'%' : '—'} | TP ${tp ? tpPct.toFixed(4)+'%' : '—'}`)
       console.log(`  shouldClose: ${trig} (SL=${hitSl}, TP=${hitTp})  canLiquidate: ${canLiq}`)
+      console.log(`  Payout now est: ${Number(ethers.formatEther(payout)).toFixed(6)} ETH | Treasury: ${Number(ethers.formatEther(perpsBal)).toFixed(6)} ETH | ${insuff ? 'INSUFFICIENT' : 'OK'}`)
     } catch (e: any) {
       console.warn('Error inspecting', addr, e?.message || e)
     }

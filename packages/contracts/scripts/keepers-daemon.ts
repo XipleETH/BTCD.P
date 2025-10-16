@@ -134,6 +134,34 @@ async function main() {
         const res = await perps.shouldClose(trader)
         const trig: boolean = Boolean((res as any)[0])
         if (trig) {
+          // Preflight: estimate payout and skip if treasury is insufficient
+          try {
+            const pos = await perps.positions(trader)
+            if (pos.isOpen) {
+              const takerFeeBps: bigint = await perps.takerFeeBps()
+              const margin: bigint = pos.margin
+              const lev: bigint = pos.leverage
+              const notional = margin * lev
+              const fee = (notional * takerFeeBps) / 10000n
+              const entry: bigint = pos.entryPrice
+              const price: bigint = await (perps as any).getPrice()
+              let pnl = 0n
+              if (entry !== 0n) {
+                const diff = price - entry
+                if (pos.isLong) pnl = (notional * diff) / entry
+                else pnl = (notional * (-diff)) / entry
+              }
+              const settle = (margin as bigint) + pnl - fee
+              const payout = settle <= 0n ? 0n : settle
+              const bal = await provider.getBalance(PERPS)
+              if (payout > bal) {
+                if (DEBUG) console.warn('skip closeIfTriggered due to insufficient treasury', trader, 'payout', payout.toString(), 'bal', bal.toString())
+                continue
+              }
+            }
+          } catch (e:any) {
+            if (DEBUG) console.warn('preflight payout check failed', trader, e?.message || e)
+          }
           const tx = await perps.closeIfTriggered(trader, GAS_LIMIT ? { gasLimit: GAS_LIMIT } : {})
           console.log(new Date().toISOString(), 'closeIfTriggered', trader, tx.hash)
           sent++

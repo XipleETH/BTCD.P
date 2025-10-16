@@ -61,7 +61,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
 
-  // Fetch pre-aggregated candle JSON; bootstrap from localStorage and refresh periodically
+  // Fetch pre-aggregated candle JSON; bootstrap from localStorage
   useEffect(() => {
     let cancelled = false
     const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
@@ -102,18 +102,44 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     return () => { cancelled = true }
   }, [chainKey, tf])
 
+  // Auto-refresh candles from API every 60s (no page reload)
+  useEffect(() => {
+    const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+    const lsKey = `btcd:candles:${key}:${tf}`
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+    const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}`
+    let t: number | undefined
+    const tick = async () => {
+      try {
+        const res = await fetch(url, { cache: 'no-store' })
+        if (res.ok) {
+          const j = await res.json()
+          if (Array.isArray(j.candles)) {
+            const cs: Candle[] = j.candles.map((c:any) => ({ time: Number(c.time) as UTCTimestamp, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
+            cs.sort((a,b)=>a.time-b.time)
+            setCandles(cs)
+            try { localStorage.setItem(lsKey, JSON.stringify(cs)) } catch {}
+          }
+        }
+      } catch {}
+      t = window.setTimeout(tick, 60000)
+    }
+    t = window.setTimeout(tick, 60000)
+    return () => { if (t) window.clearTimeout(t) }
+  }, [chainKey, tf])
+
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestAnswer',
-    query: { enabled: Boolean(oracleAddress), refetchInterval: 15000, refetchIntervalInBackground: true }
+    query: { enabled: Boolean(oracleAddress), refetchInterval: 60000, refetchIntervalInBackground: true }
   })
   const { data: latestTs } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestTimestamp',
-    query: { enabled: Boolean(oracleAddress), refetchInterval: 15000, refetchIntervalInBackground: true }
+    query: { enabled: Boolean(oracleAddress), refetchInterval: 60000, refetchIntervalInBackground: true }
   })
   useEffect(() => {
     if (typeof latestAns === 'bigint' && typeof latestTs === 'bigint') {

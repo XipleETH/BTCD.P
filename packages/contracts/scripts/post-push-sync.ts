@@ -21,7 +21,8 @@ async function main() {
   const netName = network.name
   const chain = (netName === 'baseSepolia') ? 'base-sepolia' : (netName === 'base' ? 'base' : netName)
   if (!Number.isFinite(value) || !Number.isFinite(time) || !time) return
-  await axios.post(ingestUrl, { secret: ingestSecret, chain, time, value }, { timeout: 10000 })
+  const market = (process.env.MARKET || 'btcd').toLowerCase()
+  await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value }, { timeout: 10000 })
   console.log('Synced tick to DB:', chain, time, value)
 }
 

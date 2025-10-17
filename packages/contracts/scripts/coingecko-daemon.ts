@@ -90,7 +90,8 @@ async function runOnce(oracleAddr: string | undefined, last?: { v: number }): Pr
     const ingestSecret = process.env.INGEST_SECRET
     if (ingestUrl && ingestSecret) {
       const chain = getChain()
-      await axios.post(ingestUrl, { secret: ingestSecret, chain, time: nowSec, value: pct }, { timeout: 8000 })
+      const market = (process.env.MARKET || 'btcd').toLowerCase()
+      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time: nowSec, value: pct }, { timeout: 8000 })
     }
   } catch (e: any) {
     console.warn('ingest sync failed', e?.message || e)

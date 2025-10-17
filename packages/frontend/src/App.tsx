@@ -377,7 +377,7 @@ function AppInner() {
 
             <section className="main-grid">
               <div className="col">
-                <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} />
+                <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
                 <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
                 <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
               </div>
@@ -803,7 +803,7 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
   )
 }
 
-function OraclePrice({ oracleAddress }: { oracleAddress: string }) {
+function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market: 'btcd'|'random' }) {
   const { data } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
@@ -811,7 +811,10 @@ function OraclePrice({ oracleAddress }: { oracleAddress: string }) {
     query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
   })
   const pct = typeof data === 'bigint' ? Number(formatUnits(data, 8)) : undefined
-  return <div className="muted">BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
+  if (market === 'btcd') {
+    return <div className="muted">BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
+  }
+  return <div className="muted">Random Index: {pct !== undefined ? `${pct.toFixed(2)}` : '—'}</div>
 }
 
 export default function App() {
@@ -890,7 +893,7 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
 }
 
 // Combined, pro-looking panels
-function TradePanel({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
+function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random' }) {
   const [isLong, setIsLong] = useState(true)
   const [leverage, setLeverage] = useState(10)
   const [marginEth, setMarginEth] = useState('0.1')
@@ -898,8 +901,8 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey }: { perpsAddress: s
     <div className="card">
       <div className="card-body grid gap-12">
         <div>
-          <div className="muted small">Precio BTC.D (oráculo)</div>
-          <OraclePrice oracleAddress={oracleAddress} />
+          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : 'Precio Random (oráculo)'}</div>
+          <OraclePrice oracleAddress={oracleAddress} market={market} />
         </div>
         <div className="segmented">
           <button className={isLong? 'seg long-btn active':'seg long-btn'} onClick={()=>setIsLong(true)}>Long</button>

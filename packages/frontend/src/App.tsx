@@ -626,6 +626,13 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
 function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', compact?: boolean }) {
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
+  const { data: pos } = useReadContract({
+    abi: perpsAbi as any,
+    address: (perpsAddress || undefined) as any,
+    functionName: 'positions',
+    args: [address!],
+    query: { enabled: Boolean(perpsAddress && address), refetchInterval: 15000 }
+  }) as { data: any }
   const { data: stops } = useReadContract({
     abi: perpsAbi as any,
     address: (perpsAddress || undefined) as any,
@@ -640,18 +647,36 @@ function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: strin
     args: [address!],
     query: { enabled: Boolean(perpsAddress && address), refetchInterval: 15000 }
   })
-  const [slPct, setSlPct] = useState('')
-  const [tpPct, setTpPct] = useState('')
+  const [mode, setMode] = useState<'absolute'|'relative'>('absolute')
+  const [slInput, setSlInput] = useState('')
+  const [tpInput, setTpInput] = useState('')
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
-  const toScaled = (s: string) => {
-    const v = parseFloat((s||'').replace(',','.'))
+  const toScaledAbs = (v: number) => {
     if (isNaN(v) || v < 0 || v > 100) return null
     return BigInt(Math.round(v * 1e8))
   }
+  const entryPct = (() => {
+    try { return pos ? Number(formatUnits((pos as any)[4] || 0n, 8)) : undefined } catch { return undefined }
+  })()
+  const computeAbs = (raw: string, isSL: boolean): number | null => {
+    const parsed = parseFloat((raw||'').replace(',','.'))
+    if (isNaN(parsed)) return null
+    if (mode === 'absolute') {
+      return parsed
+    } else {
+      // relative delta from entry (can be negative or positive)
+      if (entryPct === undefined) return null
+      const abs = entryPct + parsed
+      return abs
+    }
+  }
   const onSet = async () => {
-    const sl = slPct ? toScaled(slPct) : 0n
-    const tp = tpPct ? toScaled(tpPct) : 0n
+    const slAbs = slInput ? computeAbs(slInput, true) : 0
+    const tpAbs = tpInput ? computeAbs(tpInput, false) : 0
+    if (slAbs === null || tpAbs === null) return
+    const sl = slAbs ? toScaledAbs(slAbs) : 0n
+    const tp = tpAbs ? toScaledAbs(tpAbs) : 0n
     if (sl === null || tp === null) return
     await writeContract({
       abi: perpsAbi as any,
@@ -673,13 +698,28 @@ function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: strin
   }
   const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
   const trigArr = (trig || []) as [boolean, boolean, boolean]
+  const slPreview = slInput ? computeAbs(slInput, true) : null
+  const tpPreview = tpInput ? computeAbs(tpInput, false) : null
   const inner = (
     <div className="grid gap-8">
-      <div className="muted">Stop Loss actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | Take Profit actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+      <div className="muted">Entrada: {entryPct !== undefined ? entryPct.toFixed(4)+'%' : '—'} | SL actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | TP actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+      <div className="segmented">
+        <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>Absoluto (%)</button>
+        <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>Relativo (Δ%)</button>
+      </div>
       <div className="row">
-        <input className="input" placeholder="SL %" value={slPct} onChange={e=>setSlPct(e.target.value)} />
-        <input className="input" placeholder="TP %" value={tpPct} onChange={e=>setTpPct(e.target.value)} />
+        <input className="input" placeholder={mode==='absolute' ? 'SL % (ej 60.10)' : 'SL Δ% (ej -1.0)'} value={slInput} onChange={e=>setSlInput(e.target.value)} />
+        <input className="input" placeholder={mode==='absolute' ? 'TP % (ej 61.20)' : 'TP Δ% (ej +1.5)'} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
         <button className="btn" disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear</button>
+      </div>
+      <div className="muted small">
+        {mode==='relative' ? (
+          <>
+            {entryPct !== undefined ? `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4)+'%' : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4)+'%' : '—'}` : 'Abre una posición para usar relativo'}
+          </>
+        ) : (
+          <>Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10</>
+        )}
       </div>
       <div className="muted">Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
       <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>

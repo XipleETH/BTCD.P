@@ -16,9 +16,13 @@
     "export:history": "hardhat run scripts/export-history.ts --network baseSepolia",
     "post:push:sync": "hardhat run scripts/post-push-sync.ts --network baseSepolia",
     "backfill:db": "hardhat run scripts/backfill-to-db.ts --network baseSepolia",
-    "verify:keepers": "hardhat run scripts/verify-keepers.ts --network baseSepolia"
+    "verify:keepers": "hardhat run scripts/verify-keepers.ts --network baseSepolia",
+    "grant-updater": "hardhat run scripts/grant-updater.ts --network baseSepolia",
+    "grant-updater:random": "cross-env KIND=random hardhat run scripts/grant-updater.ts --network baseSepolia"
   },
+  "bin": {},
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@types/node": "^20.16.10",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.7",
     "@nomicfoundation/hardhat-ignition": "^0.15.8",

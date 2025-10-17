@@ -94,6 +94,12 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
   const containerId = 'chart_container'
 
+  // Reset local state when switching markets to show a fresh chart
+  useEffect(() => {
+    setCandles([])
+    setLivePrice(null)
+  }, [market])
+
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
 
@@ -232,7 +238,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     setOverlayTop(clamped)
   }, [livePrice, candles, tf])
 
-  // Initialize chart once
+  // Initialize chart; recreate when market changes to ensure a fresh chart per market
   useEffect(() => {
     const el = document.getElementById(containerId) as HTMLDivElement | null
     if (!el) return
@@ -249,7 +255,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     const onResize = () => chart.applyOptions({ width: el.clientWidth })
     window.addEventListener('resize', onResize)
     return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = null }
-  }, [])
+  }, [market])
 
   // Removed legacy static history refresh (now using API candles exclusively)
 
@@ -284,7 +290,8 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   return (
     <div className="card">
       <div className="card-header">
-        <div className="tabs">
+        <div className="tabs" style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ fontSize:12, fontWeight:600, opacity:0.8 }}>{market==='btcd' ? 'BTC Dominance' : 'Random Index'}</div>
           {(['5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
             <button key={k} onClick={()=>setTf(k)} className={tf===k? 'tab active':'tab'}>{k}</button>
           ))}

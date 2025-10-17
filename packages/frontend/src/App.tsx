@@ -92,7 +92,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
-  const containerId = 'chart_container'
+  const containerId = useMemo(() => `chart_container_${market}`, [market])
 
   // Reset local state when switching markets to show a fresh chart
   useEffect(() => {

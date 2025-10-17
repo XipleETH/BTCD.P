@@ -1,4 +1,5 @@
 import { ethers, network } from 'hardhat'
+import axios from 'axios'
 
 // Env: RANDOM_ORACLE, INTERVAL_MS(optional), MAX_BPS(optional)
 // Changes price every INTERVAL by a random delta in [-MAX_BPS, +MAX_BPS] bps of current price.
@@ -17,6 +18,12 @@ async function main() {
   const maxBps = Number(process.env.MAX_BPS || '10') // 10 bps = 0.10%
   if (maxBps <= 0 || maxBps > 100) throw new Error('MAX_BPS out of bounds (1..100)')
 
+  // Optional DB ingest for shared chart
+  const ingestUrl = (process.env.INGEST_URL || '').trim()
+  const ingestSecret = (process.env.INGEST_SECRET || '').trim()
+  const chain = (process.env.CHAIN || (network.name === 'baseSepolia' ? 'base-sepolia' : (network.name === 'base' ? 'base' : network.name))).toLowerCase()
+  const market = (process.env.MARKET || 'random').toLowerCase()
+
   while (true) {
     try {
       const latest = await oracle.latestAnswer()
@@ -31,6 +38,17 @@ async function main() {
       await tx.wait()
       // Optional: log sparsely
       console.log(new Date().toISOString(), 'stepBps', stepBps, 'price', next.toString())
+
+      // Optional: sync to DB for charting
+      if (ingestUrl && ingestSecret) {
+        try {
+          const time = Math.floor(Date.now() / 1000)
+          const value = Number(ethers.formatUnits(next, 8))
+          await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value }, { timeout: 8000 })
+        } catch (e: any) {
+          console.warn('ingest sync failed', e?.message || e)
+        }
+      }
     } catch (e) {
       console.error('tick error', e)
     }

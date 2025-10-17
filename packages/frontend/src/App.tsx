@@ -250,7 +250,12 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
     })
     chartRef.current = chart as any
-    const series = chart.addCandlestickSeries({ upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' })
+    const isRandom = market === 'random'
+    const series = chart.addCandlestickSeries(
+      isRandom
+        ? { upColor: '#3b82f6', downColor: '#1d4ed8', borderVisible: false, wickUpColor: '#60a5fa', wickDownColor: '#60a5fa' }
+        : { upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' }
+    )
     seriesRef.current = series as any
     const onResize = () => chart.applyOptions({ width: el.clientWidth })
     window.addEventListener('resize', onResize)
@@ -319,9 +324,9 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
 
 const queryClient = new QueryClient()
 
-function AppInner() {
+function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random' }) {
   const [chain, setChain] = useState<'base'|'baseSepolia'>('baseSepolia')
-  const [market, setMarket] = useState<'btcd'|'random'>('btcd')
+  const market: 'btcd'|'random' = routeMarket
   const config = useMemo(() => getDefaultConfig({
     appName: 'BTCD Perps',
     projectId: 'btcd-temp',
@@ -359,10 +364,10 @@ function AppInner() {
                 </div>
               </div>
               <div className="network-switcher" style={{ marginLeft: 16 }}>
-                <span className="label">Market</span>
+                <span className="label">Page</span>
                 <div className="segmented">
-                  <button className={market==='btcd'?'seg active':'seg'} onClick={()=>setMarket('btcd')}>BTC.D</button>
-                  <button className={market==='random'?'seg active':'seg'} onClick={()=>setMarket('random')}>Random</button>
+                  <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
+                  <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
                 </div>
               </div>
               <NetworkHelper desired={chain} />
@@ -818,9 +823,22 @@ function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market:
 }
 
 export default function App() {
+  // Tiny hash router: #btcd (default) or #random
+  const [route, setRoute] = useState<'btcd' | 'random'>(() => {
+    const h = (typeof window !== 'undefined' ? window.location.hash : '') || ''
+    return h.replace('#', '') === 'random' ? 'random' : 'btcd'
+  })
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash || ''
+      setRoute(h.replace('#', '') === 'random' ? 'random' : 'btcd')
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
   return (
     <ErrorBoundary>
-      <AppInner />
+      <AppInner routeMarket={route} />
     </ErrorBoundary>
   )
 }

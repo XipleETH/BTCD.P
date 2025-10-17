@@ -2,20 +2,21 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// POST { secret, chain, time, value }
+// POST { secret, chain, market, time, value }
 export default async function handler(req: Request): Promise<Response> {
   try {
     if (req.method !== 'POST') return resp(405, { error: 'method' })
     const body = await req.json() as any
     const secret = String(body?.secret || '')
     if (!secret || secret !== (process.env.INGEST_SECRET || '')) return resp(401, { error: 'unauthorized' })
-    const chain = String(body?.chain || 'base-sepolia').toLowerCase()
+  const chain = String(body?.chain || 'base-sepolia').toLowerCase()
+  const market = String(body?.market || 'btcd').toLowerCase()
     const time = Number(body?.time)
     const value = Number(body?.value)
     if (!Number.isFinite(time) || !Number.isFinite(value)) return resp(400, { error: 'invalid payload' })
 
     const redis = Redis.fromEnv()
-    const ticksKey = `btcd:ticks:${chain}`
+  const ticksKey = `btcd:ticks:${chain}:${market}`
     // Store as ZSET score=time, member=value (as string)
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
     // Trim to last 10000

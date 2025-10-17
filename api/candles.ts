@@ -2,17 +2,18 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// Query: ?chain=base-sepolia&tf=15m
+// Query: ?chain=base-sepolia&tf=15m&market=btcd|random
 export default async function handler(req: Request): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url)
     const chain = (searchParams.get('chain') || 'base-sepolia').toLowerCase()
     const tf = (searchParams.get('tf') || '15m').toLowerCase()
+    const market = (searchParams.get('market') || 'btcd').toLowerCase()
     const validTf = new Set(['5m','15m','1h','4h','1d','3d','1w'])
     if (!validTf.has(tf)) return json({ error: 'invalid timeframe' }, 400)
 
     const redis = Redis.fromEnv()
-    const ticksKey = `btcd:ticks:${chain}`
+  const ticksKey = `btcd:ticks:${chain}:${market}`
     // Get latest up to N ticks with scores (timestamps)
     const N = 10000
     // Upstash zrange with withScores returns [member, score, member, score, ...]
@@ -35,7 +36,7 @@ export default async function handler(req: Request): Promise<Response> {
       : tf === '3d' ? 259200
       : 604800
     const candles = aggregate(points, bucketSec)
-    return json({ chain, timeframe: tf, updatedAt: new Date().toISOString(), candles })
+    return json({ chain, market, timeframe: tf, updatedAt: new Date().toISOString(), candles })
   } catch (e: any) {
     return json({ error: e?.message || String(e) }, 500)
   }

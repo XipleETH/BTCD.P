@@ -83,7 +83,7 @@ function normalizeContinuity(cs: Candle[]): Candle[] {
   return out
 }
 
-function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, chainKey: 'base'|'baseSepolia' }) {
+function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random' }) {
   const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
@@ -101,10 +101,10 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
   useEffect(() => {
     let cancelled = false
     const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-    const lsKey = `btcd:candles:${key}:${tf}`
+    const lsKey = `btcd:candles:${key}:${market}:${tf}`
   // Use serverless API endpoint backed by DB
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}`
+  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}`
     const load = async () => {
       try {
         // localStorage bootstrap
@@ -137,14 +137,14 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     }
     load()
     return () => { cancelled = true }
-  }, [chainKey, tf])
+  }, [chainKey, tf, market])
 
   // Auto-refresh candles from API every 60s (no page reload)
   useEffect(() => {
-    const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-    const lsKey = `btcd:candles:${key}:${tf}`
+  const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+  const lsKey = `btcd:candles:${key}:${market}:${tf}`
     const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-    const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}`
+  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}`
     let t: number | undefined
     const tick = async () => {
       try {
@@ -164,7 +164,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
     }
     t = window.setTimeout(tick, 60000)
     return () => { if (t) window.clearTimeout(t) }
-  }, [chainKey, tf])
+  }, [chainKey, tf, market])
 
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
@@ -198,7 +198,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           last.low = Math.min(last.low, v)
           updated[updated.length - 1] = last
           // persist
-          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${tf}`, JSON.stringify(updated)) } catch {}
+          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${market}:${tf}`, JSON.stringify(updated)) } catch {}
           return updated
         }
         // Rolled into a new bucket: start a new candle that opens at previous close
@@ -208,7 +208,7 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
           const nc: Candle = { time: currBucket as UTCTimestamp, open, high: Math.max(open, v), low: Math.min(open, v), close: v }
           updated.push(nc)
           // persist
-          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${tf}`, JSON.stringify(updated)) } catch {}
+          try { const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'); localStorage.setItem(`btcd:candles:${key}:${market}:${tf}`, JSON.stringify(updated)) } catch {}
           return updated
         }
         return updated
@@ -294,7 +294,12 @@ function DominanceChart({ oracleAddress, chainKey }: { oracleAddress: string, ch
         <div ref={chartWrapRef} style={{ position:'relative' }}>
           <div id={containerId} className="chart" />
           <div style={{ position:'absolute', top: overlayTop, right: 6, background:'#fff', color:'#111', border:'1px solid #d1d5db', boxShadow:'0 1px 3px rgba(0,0,0,0.25)', padding:'4px 8px', borderRadius:4, fontSize:12, lineHeight:1.15, fontWeight:600, minWidth:64, textAlign:'right' }}>
-            <div>{(typeof livePrice === 'number' ? livePrice : (candles[candles.length-1]?.close ?? 0)).toFixed(2)}%</div>
+            <div>
+              {(() => {
+                const val = (typeof livePrice === 'number' ? livePrice : (candles[candles.length-1]?.close ?? 0));
+                return `${val.toFixed(2)}${market==='btcd' ? '%' : ''}`
+              })()}
+            </div>
             <div style={{ fontWeight:500 }}>{`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`}</div>
           </div>
         </div>
@@ -309,6 +314,7 @@ const queryClient = new QueryClient()
 
 function AppInner() {
   const [chain, setChain] = useState<'base'|'baseSepolia'>('baseSepolia')
+  const [market, setMarket] = useState<'btcd'|'random'>('btcd')
   const config = useMemo(() => getDefaultConfig({
     appName: 'BTCD Perps',
     projectId: 'btcd-temp',
@@ -325,9 +331,10 @@ function AppInner() {
 
   useEffect(() => {
     const key = chain
-    if ((deployed as any)?.[key]?.oracle) setOracleAddress((deployed as any)[key].oracle)
-    if ((deployed as any)?.[key]?.perps) setPerpsAddress((deployed as any)[key].perps)
-  }, [chain])
+    const entry = (deployed as any)?.[key]?.[market]
+    setOracleAddress(entry?.oracle || '')
+    setPerpsAddress(entry?.perps || '')
+  }, [chain, market])
 
   return (
     <WagmiProvider config={config}>
@@ -344,6 +351,13 @@ function AppInner() {
                   <button className={chain==='base'?'seg active':'seg'} onClick={()=>setChain('base')}>Base</button>
                 </div>
               </div>
+              <div className="network-switcher" style={{ marginLeft: 16 }}>
+                <span className="label">Market</span>
+                <div className="segmented">
+                  <button className={market==='btcd'?'seg active':'seg'} onClick={()=>setMarket('btcd')}>BTC.D</button>
+                  <button className={market==='random'?'seg active':'seg'} onClick={()=>setMarket('random')}>Random</button>
+                </div>
+              </div>
               <NetworkHelper desired={chain} />
             </div>
             <div className="header-right"><ConnectButton /></div>
@@ -351,7 +365,7 @@ function AppInner() {
 
           <main className="main">
             <section className="main-top">
-              <DominanceChart oracleAddress={oracleAddress} chainKey={chain} />
+              <DominanceChart oracleAddress={oracleAddress} chainKey={chain} market={market} />
             </section>
 
             <section className="main-grid">

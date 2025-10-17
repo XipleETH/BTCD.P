@@ -80,24 +80,30 @@ async function fetchBTCD(): Promise<number> {
   }
 }
 
-async function runOnce(oracleAddr: string | undefined, last?: { v: number }): Promise<number> {
+async function runOnce(oracleAddr: string | undefined, requireOnchain: boolean, last?: { v: number }): Promise<number> {
   const pct = await fetchBTCD()
   const minChange = Number(process.env.MIN_CHANGE || '0') // in percentage points, e.g. 0.01 = 1bp
   const nowSec = Math.floor(Date.now()/1000)
-  // Always sync to DB for chart
-  try {
-    const ingestUrl = process.env.INGEST_URL
-    const ingestSecret = process.env.INGEST_SECRET
-    if (ingestUrl && ingestSecret) {
-      const chain = getChain()
-      const market = (process.env.MARKET || 'btcd').toLowerCase()
-      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time: nowSec, value: pct }, { timeout: 8000 })
-    }
-  } catch (e: any) {
-    console.warn('ingest sync failed', e?.message || e)
+  // If ORACLE is missing and on-chain is required, error out early
+  if (!oracleAddr && requireOnchain) {
+    throw new Error('REQUIRE_ONCHAIN=true and ORACLE not set; refusing to write DB-only ticks')
   }
+  // If no oracle and DB-only allowed, we only POST to DB and return
   if (!oracleAddr) {
-    console.log(new Date().toISOString(), 'DB-only mode: ORACLE not set; synced tick', pct.toFixed(6), '%')
+    try {
+      const ingestUrl = process.env.INGEST_URL
+      const ingestSecret = process.env.INGEST_SECRET
+      if (ingestUrl && ingestSecret) {
+        const chain = getChain()
+        const market = (process.env.MARKET || 'btcd').toLowerCase()
+        await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time: nowSec, value: pct }, { timeout: 8000 })
+        console.log(new Date().toISOString(), '[DB-ONLY]', market, pct.toFixed(6), '% posted')
+      } else {
+        console.log(new Date().toISOString(), '[DB-ONLY]', 'No INGEST configured; skipping')
+      }
+    } catch (e: any) {
+      console.warn('ingest sync failed (db-only)', e?.message || e)
+    }
     return pct
   }
   if (last && Math.abs(pct - last.v) < minChange) {
@@ -111,20 +117,38 @@ async function runOnce(oracleAddr: string | undefined, last?: { v: number }): Pr
   const tx = await oracle.pushPrice(priceScaled)
   console.log(new Date().toISOString(), 'BTC.D', pct.toFixed(6), '% tx=', tx.hash)
   await tx.wait()
+  // Only after a successful on-chain push, sync to DB for charting
+  try {
+    const ingestUrl = process.env.INGEST_URL
+    const ingestSecret = process.env.INGEST_SECRET
+    if (ingestUrl && ingestSecret) {
+      const chain = getChain()
+      const market = (process.env.MARKET || 'btcd').toLowerCase()
+      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time: nowSec, value: pct }, { timeout: 8000 })
+    }
+  } catch (e: any) {
+    console.warn('ingest sync failed (post-onchain)', e?.message || e)
+  }
   return pct
 }
 
 async function main() {
   const oracleAddr = (process.env.ORACLE || '').trim() || undefined
   const intervalSec = Number(process.env.CG_INTERVAL_SEC || '300')
+  const requireOnchain = String(process.env.REQUIRE_ONCHAIN || 'true').toLowerCase() === 'true'
   if (!oracleAddr) {
-    console.warn('ORACLE not set: running in DB-only mode (no on-chain pushes). Set ORACLE to enable on-chain updates.')
+    if (requireOnchain) {
+      console.error('ORACLE not set and REQUIRE_ONCHAIN=true → exiting to avoid DB-only writes.')
+      process.exit(1)
+    } else {
+      console.warn('ORACLE not set: running in DB-only mode (no on-chain pushes). Set ORACLE or REQUIRE_ONCHAIN=true to enforce on-chain-only.')
+    }
   }
   // eslint-disable-next-line no-constant-condition
   let last: { v: number } | undefined = undefined
   while (true) {
     try {
-      const v = await runOnce(oracleAddr, last)
+      const v = await runOnce(oracleAddr, requireOnchain, last)
       last = { v }
     } catch (e: any) {
       const status = e?.response?.status

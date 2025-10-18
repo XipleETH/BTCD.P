@@ -9,7 +9,7 @@ export default async function handler(req: Request): Promise<Response> {
     const chain = (searchParams.get('chain') || 'base-sepolia').toLowerCase()
     const tf = (searchParams.get('tf') || '15m').toLowerCase()
     const market = (searchParams.get('market') || 'btcd').toLowerCase()
-    const validTf = new Set(['5m','15m','1h','4h','1d','3d','1w'])
+  const validTf = new Set(['1m','5m','15m','1h','4h','1d','3d','1w'])
     if (!validTf.has(tf)) return json({ error: 'invalid timeframe' }, 400)
 
     const redis = Redis.fromEnv()
@@ -27,7 +27,8 @@ export default async function handler(req: Request): Promise<Response> {
     }
     points.sort((a,b)=>a.time-b.time)
 
-    const bucketSec = tf === '5m' ? 300
+    const bucketSec = tf === '1m' ? 60
+      : tf === '5m' ? 300
       : tf === '15m' ? 900
       : tf === '1h' ? 3600
       : tf === '4h' ? 14400

@@ -52,8 +52,9 @@ type Tick = { time: UTCTimestamp, value: number }
 type Candle = { time: UTCTimestamp, open: number, high: number, low: number, close: number }
 
 // Helper: timeframe seconds
-function tfSeconds(tf: '5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'): number {
+function tfSeconds(tf: '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'): number {
   switch (tf) {
+    case '1m': return 60
     case '5m': return 300
     case '15m': return 900
     case '1h': return 3600
@@ -84,7 +85,7 @@ function normalizeContinuity(cs: Candle[]): Candle[] {
 }
 
 function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random' }) {
-  const [tf, setTf] = useState<'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
+  const [tf, setTf] = useState<'1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
   const [overlayTop, setOverlayTop] = useState<number>(8)
@@ -306,7 +307,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       <div className="card-header">
         <div className="tabs" style={{ display:'flex', alignItems:'center', gap:8 }}>
           <div style={{ fontSize:12, fontWeight:600, opacity:0.8 }}>{market==='btcd' ? 'BTC Dominance' : 'Random Index'}</div>
-          {(['5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
+          {(['1m','5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
             <button key={k} onClick={()=>setTf(k)} className={tf===k? 'tab active':'tab'}>{k}</button>
           ))}
         </div>

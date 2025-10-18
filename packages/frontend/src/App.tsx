@@ -242,6 +242,15 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   useEffect(() => {
     const el = document.getElementById(containerId) as HTMLDivElement | null
     if (!el) return
+    // Defensive: if a previous chart instance exists or children remain, clean up fully before creating a new one
+    try {
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+      }
+      seriesRef.current = null
+      while (el.firstChild) el.removeChild(el.firstChild)
+    } catch {}
     const chart = createChart(el, {
       width: el.clientWidth,
       height: 480,

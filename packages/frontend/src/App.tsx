@@ -84,7 +84,7 @@ function normalizeContinuity(cs: Candle[]): Candle[] {
   return out
 }
 
-function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random' }) {
+function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
   const [tf, setTf] = useState<'1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
@@ -306,7 +306,9 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     <div className="card">
       <div className="card-header">
         <div className="tabs" style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ fontSize:12, fontWeight:600, opacity:0.8 }}>{market==='btcd' ? 'BTC Dominance' : 'Random Index'}</div>
+          <div style={{ fontSize:12, fontWeight:600, opacity:0.8 }}>
+            {market==='btcd' ? 'BTC Dominance' : (market==='random' ? 'Random Index' : 'Local/Away Index')}
+          </div>
           {(['1m','5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
             <button key={k} onClick={()=>setTf(k)} className={tf===k? 'tab active':'tab'}>{k}</button>
           ))}
@@ -334,9 +336,9 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
 
 const queryClient = new QueryClient()
 
-function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random' }) {
+function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' }) {
   const [chain, setChain] = useState<'base'|'baseSepolia'>('baseSepolia')
-  const market: 'btcd'|'random' = routeMarket
+  const market: 'btcd'|'random'|'localaway' = routeMarket
   const config = useMemo(() => getDefaultConfig({
     appName: 'BTCD Perps',
     projectId: 'btcd-temp',
@@ -378,6 +380,7 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random' }) {
                 <div className="segmented">
                   <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
                   <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
+                  <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Local/Away</a>
                 </div>
               </div>
               <NetworkHelper desired={chain} />
@@ -397,7 +400,7 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random' }) {
                 <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
               </div>
               <div className="col">
-                <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
+                <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
                 <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
               </div>
             </section>
@@ -508,7 +511,7 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
   )
 }
 
-function MyPosition({ perpsAddress, oracleAddress }: { perpsAddress: string, oracleAddress: string }) {
+function MyPosition({ perpsAddress, oracleAddress, market }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
   const { address } = useAccount()
   const { data: pos } = useReadContract({
     abi: perpsAbi as any,
@@ -565,8 +568,8 @@ function MyPosition({ perpsAddress, oracleAddress }: { perpsAddress: string, ora
     <div className="stats-grid">
       <div className="stat"><span className="stat-label">Lado</span><span className={isLong ? 'badge long':'badge short'}>{isLong ? 'Long' : 'Short'}</span></div>
       <div className="stat"><span className="stat-label">Leverage</span><span className="stat-value">x{String(leverage)}</span></div>
-      <div className="stat"><span className="stat-label">Entrada</span><span className="stat-value">{entryPct.toFixed(4)}%</span></div>
-      <div className="stat"><span className="stat-label">Precio</span><span className="stat-value">{pctIndex.toFixed(4)}%</span></div>
+  <div className="stat"><span className="stat-label">Entrada</span><span className="stat-value">{entryPct.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
+  <div className="stat"><span className="stat-label">Precio</span><span className="stat-value">{pctIndex.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
       <div className="stat"><span className="stat-label">Margen</span><span className="stat-value">{marginEth.toFixed(6)} ETH</span></div>
       <div className="stat"><span className="stat-label">Notional</span><span className="stat-value">{notionalEth.toFixed(6)} ETH</span></div>
       <div className="stat"><span className="stat-label">MM Ratio</span><span className="stat-value">{mmRatio/100}%</span></div>
@@ -659,7 +662,7 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
   )
 }
 
-function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random', compact?: boolean }) {
+function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway', compact?: boolean }) {
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: pos } = useReadContract({
@@ -695,7 +698,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
       // BTC.D is a percentage index [0,100]
       if (v < 0 || v > 100) return null
     } else {
-      // Random is an arbitrary positive index (>0). Allow large values.
+      // Random/LocalAway are arbitrary positive indexes (>0). Allow large values.
       if (v <= 0) return null
     }
     return BigInt(Math.round(v * 1e8))
@@ -786,7 +789,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
           </>
         ) : (
           <>
-            {market==='btcd' ? 'Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10' : 'Usa valores absolutos del índice Random (>0), p.ej. 995.5'}
+            {market==='btcd' ? 'Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10' : 'Usa valores absolutos del índice (>0)'}
           </>
         )}
       </div>
@@ -850,7 +853,7 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
   )
 }
 
-function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market: 'btcd'|'random' }) {
+function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
   const { data } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
@@ -861,19 +864,21 @@ function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market:
   if (market === 'btcd') {
     return <div className="muted">BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
   }
-  return <div className="muted">Random Index: {pct !== undefined ? `${pct.toFixed(2)}` : '—'}</div>
+  return <div className="muted">{market==='random' ? 'Random Index' : 'Local/Away Index'}: {pct !== undefined ? `${pct.toFixed(2)}` : '—'}</div>
 }
 
 export default function App() {
   // Tiny hash router: #btcd (default) or #random
-  const [route, setRoute] = useState<'btcd' | 'random'>(() => {
+  const [route, setRoute] = useState<'btcd' | 'random' | 'localaway'>(() => {
     const h = (typeof window !== 'undefined' ? window.location.hash : '') || ''
-    return h.replace('#', '') === 'random' ? 'random' : 'btcd'
+    const hv = h.replace('#', '')
+    return hv === 'random' ? 'random' : (hv === 'localaway' ? 'localaway' : 'btcd')
   })
   useEffect(() => {
     const onHash = () => {
       const h = window.location.hash || ''
-      setRoute(h.replace('#', '') === 'random' ? 'random' : 'btcd')
+      const hv = h.replace('#', '')
+      setRoute(hv === 'random' ? 'random' : (hv === 'localaway' ? 'localaway' : 'btcd'))
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -952,7 +957,7 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
 }
 
 // Combined, pro-looking panels
-function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random' }) {
+function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
   const [isLong, setIsLong] = useState(true)
   const [leverage, setLeverage] = useState(10)
   const [marginEth, setMarginEth] = useState('0.1')
@@ -987,12 +992,12 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
   )
 }
 
-function PositionCard({ perpsAddress, oracleAddress }: { perpsAddress: string, oracleAddress: string }) {
+function PositionCard({ perpsAddress, oracleAddress, market }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
   return (
     <div className="card">
       <div className="card-header"><h3>Mi posición</h3></div>
       <div className="card-body">
-        <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} />
+        <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
       </div>
     </div>
   )
@@ -1013,8 +1018,8 @@ function LiquidationCard({ perpsAddress, chainKey }: { perpsAddress: string, cha
   )
 }
 
-function StopsCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
-  return <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} />
+function StopsCard({ perpsAddress, chainKey, market }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
+  return <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} market={market} />
 }
 
 function ConfigCard({ oracleAddress, perpsAddress }: { oracleAddress: string, perpsAddress: string }) {

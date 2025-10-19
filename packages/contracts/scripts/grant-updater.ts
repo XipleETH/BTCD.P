@@ -8,10 +8,10 @@ import { ethers } from 'hardhat'
 async function main() {
   const oracleAddr = (process.env.ORACLE || '').trim()
   const updater = (process.env.UPDATER || '').trim()
-  const kind = ((process.env.KIND || 'btcd').trim().toLowerCase()) as 'btcd'|'random'
+  const kind = ((process.env.KIND || 'btcd').trim().toLowerCase()) as 'btcd'|'random'|'localaway'
   if (!oracleAddr || !updater) throw new Error('Set ORACLE and UPDATER env vars')
 
-  const name = kind === 'random' ? 'RandomOracle' : 'BTCDOracle'
+  const name = kind === 'random' ? 'RandomOracle' : (kind === 'localaway' ? 'LocalAwayOracle' : 'BTCDOracle')
   const [signer] = await ethers.getSigners()
   console.log('Granting updater on', name, 'at', oracleAddr, 'to', updater, 'from', await signer.getAddress())
   const oracle = await ethers.getContractAt(name, oracleAddr)

@@ -659,7 +659,7 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
   )
 }
 
-function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', compact?: boolean }) {
+function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random', compact?: boolean }) {
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: pos } = useReadContract({
@@ -688,11 +688,19 @@ function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: strin
   const [tpInput, setTpInput] = useState('')
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
+  // Per-market validation and scaling
   const toScaledAbs = (v: number) => {
-    if (isNaN(v) || v < 0 || v > 100) return null
+    if (isNaN(v)) return null
+    if (market === 'btcd') {
+      // BTC.D is a percentage index [0,100]
+      if (v < 0 || v > 100) return null
+    } else {
+      // Random is an arbitrary positive index (>0). Allow large values.
+      if (v <= 0) return null
+    }
     return BigInt(Math.round(v * 1e8))
   }
-  const entryPct = (() => {
+  const entryVal = (() => {
     try { return pos ? Number(formatUnits((pos as any)[4] || 0n, 8)) : undefined } catch { return undefined }
   })()
   const computeAbs = (raw: string, isSL: boolean): number | null => {
@@ -702,8 +710,8 @@ function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: strin
       return parsed
     } else {
       // relative delta from entry (can be negative or positive)
-      if (entryPct === undefined) return null
-      const abs = entryPct + parsed
+      if (entryVal === undefined) return null
+      const abs = entryVal + parsed
       return abs
     }
   }
@@ -738,26 +746,38 @@ function StopsManager({ perpsAddress, chainKey, compact }: { perpsAddress: strin
   const tpPreview = tpInput ? computeAbs(tpInput, false) : null
   const inner = (
     <div className="grid gap-8">
-      <div className="muted">Entrada: {entryPct !== undefined ? entryPct.toFixed(4)+'%' : '—'} | SL actual: {stopLoss ? (Number(stopLoss)/1e8).toFixed(4)+'%' : '—'} | TP actual: {takeProfit ? (Number(takeProfit)/1e8).toFixed(4)+'%' : '—'}</div>
+      <div className="muted">Entrada: {entryVal !== undefined ? (market==='btcd' ? entryVal.toFixed(4)+'%' : entryVal.toFixed(4)) : '—'} | SL actual: {stopLoss ? (market==='btcd' ? (Number(stopLoss)/1e8).toFixed(4)+'%' : (Number(stopLoss)/1e8).toFixed(4)) : '—'} | TP actual: {takeProfit ? (market==='btcd' ? (Number(takeProfit)/1e8).toFixed(4)+'%' : (Number(takeProfit)/1e8).toFixed(4)) : '—'}</div>
       <div className="segmented">
-        <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>Absoluto (%)</button>
-        <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>Relativo (Δ%)</button>
+        <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>{market==='btcd' ? 'Absoluto (%)' : 'Absoluto (índice)'}</button>
+        <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>{market==='btcd' ? 'Relativo (Δ%)' : 'Relativo (Δ índice)'}</button>
       </div>
       <div className="row">
-        <input className="input" placeholder={mode==='absolute' ? 'SL % (ej 60.10)' : 'SL Δ% (ej -1.0)'} value={slInput} onChange={e=>setSlInput(e.target.value)} />
-        <input className="input" placeholder={mode==='absolute' ? 'TP % (ej 61.20)' : 'TP Δ% (ej +1.5)'} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
-        <button className="btn" disabled={!perpsAddress || isPending || mining} onClick={onSet}>Setear</button>
+        <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'SL % (ej 60.10)' : 'SL abs (ej 995.5)') : (market==='btcd' ? 'SL Δ% (ej -1.0)' : 'SL Δ (ej -5)')} value={slInput} onChange={e=>setSlInput(e.target.value)} />
+        <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'TP % (ej 61.20)' : 'TP abs (ej 1002.0)') : (market==='btcd' ? 'TP Δ% (ej +1.5)' : 'TP Δ (ej +8)')} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
+        {(() => {
+          // Compute validity to enable/disable button, giving clearer UX
+          const slAbsV = slInput ? computeAbs(slInput, true) : 0
+          const tpAbsV = tpInput ? computeAbs(tpInput, false) : 0
+          const slOk = slAbsV === 0 || (slAbsV !== null && toScaledAbs(slAbsV) !== null)
+          const tpOk = tpAbsV === 0 || (tpAbsV !== null && toScaledAbs(tpAbsV) !== null)
+          const disabled = !perpsAddress || isPending || mining || !slOk || !tpOk
+          return <button className="btn" disabled={disabled} onClick={onSet}>Setear</button>
+        })()}
       </div>
       <div className="muted small">
         {mode==='relative' ? (
           <>
-            {entryPct !== undefined ? `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4)+'%' : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4)+'%' : '—'}` : 'Abre una posición para usar relativo'}
+            {entryVal !== undefined ? (market==='btcd'
+              ? `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4)+'%' : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4)+'%' : '—'}`
+              : `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4) : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4) : '—'}`)
+              : 'Abre una posición para usar relativo'}
           </>
         ) : (
-          <>Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10</>
+          <>
+            {market==='btcd' ? 'Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10' : 'Usa valores absolutos del índice Random (>0), p.ej. 995.5'}
+          </>
         )}
       </div>
-      <div className="muted">Trigger: {String(trigArr?.[0])} | SL: {String(trigArr?.[1])} | TP: {String(trigArr?.[2])}</div>
       <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
       {error && <div className="error">{String(error)}</div>}
       {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
@@ -911,7 +931,6 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
         <div><strong>Saldo:</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
         <div className="row">
           <input className="input" placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
-          <button className="btn" disabled={!perpsAddress || isPending} onClick={onFund}>Fondear contrato</button>
         </div>
         {localErr && <div className="error">{localErr}</div>}
         {error && <div className="error">{String(error)}</div>}
@@ -949,7 +968,7 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
           <div style={{ width: 8 }} />
           <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chainKey} minimal />
         </div>
-        <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} compact />
+        <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} market={market} compact />
         <div className="muted small">Fees: 0.10% al abrir y 0.10% al cerrar</div>
       </div>
     </div>

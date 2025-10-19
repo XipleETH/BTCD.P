@@ -11,6 +11,7 @@ export default async function handler(req: Request): Promise<Response> {
     if (!secret || secret !== (process.env.INGEST_SECRET || '')) return resp(401, { error: 'unauthorized' })
     const chain = String(body?.chain || 'base-sepolia').toLowerCase()
     const market = String(body?.market || 'btcd').toLowerCase()
+    const mode = String(body?.mode || '').toLowerCase()
     const time = Number(body?.time)
     const value = Number(body?.value)
     if (!Number.isFinite(time) || !Number.isFinite(value)) return resp(400, { error: 'invalid payload' })
@@ -18,6 +19,11 @@ export default async function handler(req: Request): Promise<Response> {
     const redis = Redis.fromEnv()
     // Per-market keying so datasets don't mix
     const ticksKey = `btcd:ticks:${chain}:${market}`
+      // Optional delete mode to clear a series quickly
+      if (mode === 'del') {
+        await redis.del(ticksKey)
+        return resp(200, { ok: true, action: 'del', key: ticksKey })
+      }
     // Store as ZSET score=time, member=value (as string)
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
     // Trim to last 10000

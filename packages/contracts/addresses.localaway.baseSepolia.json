@@ -1,0 +1,8 @@
+{
+  "network": "baseSepolia",
+  "oracle": "0x68aeF7907FAAb44Fb3d2Ceec2E10bA07dAF111c8",
+  "perps": "0xa0d7b18811C042ee020de23c0777BE25Aed8B835",
+  "deployer": "0x5f9A424637b91A107AE5F6d49cC3Cba9069FE438",
+  "kind": "localaway",
+  "timestamp": 1760882777900
+}

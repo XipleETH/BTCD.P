@@ -337,7 +337,6 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
 const queryClient = new QueryClient()
 
 function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' }) {
-  const [chain, setChain] = useState<'base'|'baseSepolia'>('baseSepolia')
   const market: 'btcd'|'random'|'localaway' = routeMarket
   const config = useMemo(() => getDefaultConfig({
     appName: 'BTCD Perps',
@@ -349,70 +348,72 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' })
     }
   }), [])
 
-  // addresses from deployed mapping (read-only in UI)
-  const [oracleAddress, setOracleAddress] = useState<string>('')
-  const [perpsAddress, setPerpsAddress] = useState<string>('')
-
-  useEffect(() => {
-    const key = chain
-    const entry = (deployed as any)?.[key]?.[market]
-    setOracleAddress(entry?.oracle || '')
-    setPerpsAddress(entry?.perps || '')
-  }, [chain, market])
-
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-      <RainbowKitProvider>
-        <div className="container">
-          <header className="header">
-            <div className="header-left">
-              <div className="brand">BTC Dominance Perps</div>
-              <div className="network-switcher">
-                <span className="label">Network</span>
-                <div className="segmented">
-                  <button className={chain==='baseSepolia'?'seg active':'seg'} onClick={()=>setChain('baseSepolia')}>Base Sepolia</button>
-                  <button className={chain==='base'?'seg active':'seg'} onClick={()=>setChain('base')}>Base</button>
-                </div>
-              </div>
-              <div className="network-switcher" style={{ marginLeft: 16 }}>
-                <span className="label">Page</span>
-                <div className="segmented">
-                  <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
-                  <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
-                  <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Local/Away</a>
-                </div>
-              </div>
-              <NetworkHelper desired={chain} />
-            </div>
-            <div className="header-right"><ConnectButton /></div>
-          </header>
-
-          <main className="main">
-            <section className="main-top">
-              <DominanceChart oracleAddress={oracleAddress} chainKey={chain} market={market} />
-            </section>
-
-            <section className="main-grid">
-              <div className="col">
-                <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
-                <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
-                <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
-              </div>
-              <div className="col">
-                <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
-                <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
-              </div>
-            </section>
-          </main>
-        </div>
-      </RainbowKitProvider>
+        <RainbowKitProvider>
+          <AppContent market={market} />
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   )
 }
 
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
+function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
+  // Derive chain from wallet network; default to Base Sepolia when unknown/disconnected
+  const chainId = useChainId()
+  const chain: 'base'|'baseSepolia' = chainId === base.id ? 'base' : 'baseSepolia'
+
+  // addresses from deployed mapping (read-only in UI)
+  const [oracleAddress, setOracleAddress] = useState<string>('')
+  const [perpsAddress, setPerpsAddress] = useState<string>('')
+
+  useEffect(() => {
+    const entry = (deployed as any)?.[chain]?.[market]
+    setOracleAddress(entry?.oracle || '')
+    setPerpsAddress(entry?.perps || '')
+  }, [chain, market])
+
+  return (
+    <div className="container">
+      <header className="header">
+        <div className="header-left">
+          <div className="brand">BTC Dominance Perps</div>
+          <div className="network-switcher" style={{ marginLeft: 8 }}>
+            <span className="label">Page</span>
+            <div className="segmented">
+              <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
+              <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
+              <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Local/Away</a>
+            </div>
+          </div>
+        </div>
+        {/* The ConnectButton includes a chain switcher; switching there auto-updates the page */}
+        <div className="header-right"><ConnectButton /></div>
+      </header>
+
+      <main className="main">
+        <section className="main-top">
+          <DominanceChart oracleAddress={oracleAddress} chainKey={chain} market={market} />
+        </section>
+
+        <section className="main-grid">
+          <div className="col">
+            <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
+            <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
+            <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
+          </div>
+          <div className="col">
+            <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
+            <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
+          </div>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
 import { parseEther, formatUnits, formatEther, createPublicClient, http as viemHttp } from 'viem'
 
 type OpenControlled = { isLong: boolean; setIsLong: (v:boolean)=>void; leverage: number; setLeverage: (n:number)=>void; marginEth: string; setMarginEth: (s:string)=>void }
@@ -902,18 +903,7 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
   }
 }
 
-function NetworkHelper({ desired }: { desired: 'base'|'baseSepolia' }) {
-  const chainId = useChainId()
-  const { switchChainAsync, isPending } = useSwitchChain()
-  const targetId = desired === 'baseSepolia' ? baseSepolia.id : base.id
-  if (chainId === targetId) return null
-  return (
-    <div className="inline-hint">
-      <span className="warn">Red actual: {chainId}. Recomendado: {targetId}</span>
-      <button className="btn sm" disabled={isPending} onClick={()=>switchChainAsync?.({ chainId: targetId })}>Cambiar red</button>
-    </div>
-  )
-}
+// NetworkHelper removed: the page now follows the wallet network directly via ConnectButton's switch
 
 function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, desired: 'base'|'baseSepolia' }) {
   const chain = desired === 'baseSepolia' ? baseSepolia : base

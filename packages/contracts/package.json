@@ -18,7 +18,10 @@
     "backfill:db": "hardhat run scripts/backfill-to-db.ts --network baseSepolia",
     "verify:keepers": "hardhat run scripts/verify-keepers.ts --network baseSepolia",
     "grant-updater": "hardhat run scripts/grant-updater.ts --network baseSepolia",
-    "grant-updater:random": "cross-env KIND=random hardhat run scripts/grant-updater.ts --network baseSepolia"
+  "grant-updater:random": "cross-env KIND=random hardhat run scripts/grant-updater.ts --network baseSepolia",
+  "grant-updater:localaway": "cross-env KIND=localaway hardhat run scripts/grant-updater.ts --network baseSepolia",
+  "deploy:localaway": "hardhat run scripts/deployLocalAway.ts --network baseSepolia",
+  "daemon:localaway": "hardhat run scripts/localaway-daemon.ts --network baseSepolia"
   },
   "bin": {},
   "devDependencies": {

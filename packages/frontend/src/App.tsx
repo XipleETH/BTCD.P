@@ -375,7 +375,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
   }, [chain, market])
 
   return (
-    <div className="container">
+    <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
         <div className="header-left">
           <div className="brand">BTC Dominance Perps</div>

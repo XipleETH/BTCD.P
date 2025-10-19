@@ -85,3 +85,55 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
   .main-grid { grid-template-columns: 1fr; }
   .chart { height: 420px; }
 }
+
+/* Market themed variants (keep overall bg; recolor frames/buttons) */
+.market-btcd .card { background: #1a1410; border-color: #6b3d1f; }
+.market-btcd .card-header { border-bottom-color: #6b3d1f; }
+.market-btcd .segmented { border-color: #6b3d1f; }
+.market-btcd .seg { border-right-color: #6b3d1f; }
+.market-btcd .seg.active { background: #2a1c12; border-color: #8a512a; }
+.market-btcd .tab { border-color: #6b3d1f; }
+.market-btcd .tab.active { background: #2a1c12; border-color: #8a512a; }
+.market-btcd .input { background: #120e0b; border-color: #6b3d1f; }
+.market-btcd .btn { background: #2a1c12; border-color: #8a512a; }
+.market-btcd .btn:hover { background: #341f13; }
+.market-btcd .btn.primary { background: #c2410c; border-color: #a03a0b; }
+.market-btcd .btn.primary:hover { background: #a03a0b; }
+.market-btcd .btn.danger { background: #411a12; border-color: #7a2e23; color: #ffd6d1; }
+.market-btcd .btn.warning { background: #3b2409; border-color: #8a512a; color: #ffd9a3; }
+.market-btcd .stat { background: #120e0b; border-color: #6b3d1f; }
+.market-btcd .code-row { background: #120e0b; border-color: #6b3d1f; }
+
+.market-random .card { background: #161226; border-color: #4b3a7a; }
+.market-random .card-header { border-bottom-color: #4b3a7a; }
+.market-random .segmented { border-color: #4b3a7a; }
+.market-random .seg { border-right-color: #4b3a7a; }
+.market-random .seg.active { background: #241c3f; border-color: #6a56a6; }
+.market-random .tab { border-color: #4b3a7a; }
+.market-random .tab.active { background: #241c3f; border-color: #6a56a6; }
+.market-random .input { background: #0f0c19; border-color: #4b3a7a; }
+.market-random .btn { background: #241c3f; border-color: #6a56a6; }
+.market-random .btn:hover { background: #2b214c; }
+.market-random .btn.primary { background: #7c3aed; border-color: #6d28d9; }
+.market-random .btn.primary:hover { background: #6d28d9; }
+.market-random .btn.danger { background: #311a3e; border-color: #6a2b85; color: #ffd6ff; }
+.market-random .btn.warning { background: #2b1f3a; border-color: #6a56a6; color: #f3e8ff; }
+.market-random .stat { background: #0f0c19; border-color: #4b3a7a; }
+.market-random .code-row { background: #0f0c19; border-color: #4b3a7a; }
+
+.market-localaway .card { background: #141414; border-color: #3a3a3a; }
+.market-localaway .card-header { border-bottom-color: #3a3a3a; }
+.market-localaway .segmented { border-color: #3a3a3a; }
+.market-localaway .seg { border-right-color: #3a3a3a; }
+.market-localaway .seg.active { background: #1a1a1a; border-color: #4a4a4a; }
+.market-localaway .tab { border-color: #3a3a3a; }
+.market-localaway .tab.active { background: #1a1a1a; border-color: #4a4a4a; }
+.market-localaway .input { background: #0f0f0f; border-color: #3a3a3a; }
+.market-localaway .btn { background: #1a1a1a; border-color: #4a4a4a; }
+.market-localaway .btn:hover { background: #202020; }
+.market-localaway .btn.primary { background: #6b7280; border-color: #4b5563; }
+.market-localaway .btn.primary:hover { background: #4b5563; }
+.market-localaway .btn.danger { background: #2a1e1e; border-color: #5b3a3a; color: #ffd6d1; }
+.market-localaway .btn.warning { background: #2a2a2a; border-color: #4a4a4a; color: #e5e7eb; }
+.market-localaway .stat { background: #0f0f0f; border-color: #3a3a3a; }
+.market-localaway .code-row { background: #0f0f0f; border-color: #3a3a3a; }

@@ -793,7 +793,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
           </>
         )}
       </div>
-      <button className="btn warning" disabled={!perpsAddress || !trigArr?.[0] || isPending || mining} onClick={onCloseNow}>Cerrar por stop ahora</button>
+      {/* Button removed visually to save space: 'Cerrar por stop ahora' */}
       {error && <div className="error">{String(error)}</div>}
       {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
     </div>

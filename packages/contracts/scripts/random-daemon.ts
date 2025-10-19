@@ -10,9 +10,15 @@ function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)) }
 async function main() {
   const oracleAddr = process.env.RANDOM_ORACLE
   if (!oracleAddr) throw new Error('RANDOM_ORACLE not set')
-  const [signer] = await ethers.getSigners()
-  const oracle = await ethers.getContractAt('RandomOracle', oracleAddr)
-  console.log('Random daemon on', network.name, 'oracle', oracleAddr, 'as', await signer.getAddress())
+  // Prefer dedicated private key for Random to avoid nonce collisions
+  const altPkRaw = (process.env.RANDOM_PRIVATE_KEY || '').trim()
+  let signer = (await ethers.getSigners())[0]
+  if (altPkRaw) {
+    const pk = altPkRaw.startsWith('0x') ? altPkRaw : ('0x' + altPkRaw)
+    signer = new (ethers as any).Wallet(pk, ethers.provider)
+  }
+  const oracle = await ethers.getContractAt('RandomOracle', oracleAddr, signer as any)
+  console.log('Random daemon on', network.name, 'oracle', oracleAddr, 'as', await (signer as any).getAddress())
 
   const interval = Number(process.env.INTERVAL_MS || '1000')
   const maxBps = Number(process.env.MAX_BPS || '10') // 10 bps = 0.10%
@@ -34,7 +40,7 @@ async function main() {
       const delta = (latestBig * BigInt(stepBps)) / 10000n
       let next = latestBig + delta
       if (next <= 0n) next = 1n
-      const tx = await oracle.pushPrice(next)
+  const tx = await oracle.pushPrice(next)
       await tx.wait()
       // Optional: log sparsely
       console.log(new Date().toISOString(), 'stepBps', stepBps, 'price', next.toString())

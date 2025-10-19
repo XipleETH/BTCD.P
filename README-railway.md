@@ -29,11 +29,21 @@ pushes to the on-chain BTCDOracle, and syncs every tick to your /api/ingest for 
   - "ingest sync failed ..." if DB sync fails (check vars)
 
 ## 4) Notes
-- The daemon always syncs the latest tick to DB (for the chart)
-- It pushes on-chain only when |Δ| ≥ MIN_CHANGE (except first run)
-- CoinGecko rate limits: keep CG_INTERVAL_SEC ≥ 10–15s; jitter/backoff is applied on errors
-- To switch networks, change the Hardhat network via the npm script or set appropriate RPC env used by Hardhat
 
+### Separate signers to avoid nonce collisions
+
+Run CoinGecko (BTCD) and Random daemons with different private keys:
+
+- BTCD (CoinGecko) env:
+  - PRIVATE_KEY = <key A>
+  - ORACLE = <BTCD oracle addr>
+
+- Random daemon env:
+  - PRIVATE_KEY = <key A> (optional, fallback)
+  - RANDOM_PRIVATE_KEY = <key B>
+  - RANDOM_ORACLE = <Random oracle addr>
+
+The random daemon prefers RANDOM_PRIVATE_KEY if provided. Ensure both signers have updater permissions on their respective oracles.
 ## 5) Local test
 ```
 npm -w packages/contracts run daemon:cg

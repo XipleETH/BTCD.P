@@ -77,6 +77,12 @@ Componentes:
 Configurar entorno:
 - En Vercel (frontend): `API_FOOTBALL_KEY` y opcional `API_SECRET`.
 - En Railway u host del daemon: `LOCALAWAY_ORACLE`, `LOCALAWAY_PRIVATE_KEY`, `API_BASE` (URL pública del endpoint Edge), `API_SECRET` (si definido en Vercel), `INGEST_URL`, `INGEST_SECRET`, `CHAIN=base-sepolia`, `MARKET=localaway`.
+  - Opcional para reducir consumo de API: `LEAGUES` (CSV de IDs de ligas, p.ej. `39,140,135,78`), `INTERVAL_MS` (base, por defecto 60000), `MAX_INTERVAL_MS` (backoff máx, por defecto 300000).
+
+Optimización de llamadas a API-Football:
+- El endpoint Edge soporta `?leagues=...` para limitar fixtures y `?lite=1` para no pedir eventos por partido; además mantiene un caché en memoria de 10s por combinación de filtros.
+- El daemon usa el modo `lite` y calcula deltas a partir de los marcadores (home/away) en lugar de consultar eventos, y aplica backoff dinámico hasta `MAX_INTERVAL_MS` cuando no hay goles nuevos.
+- Recomendado: configurar `LEAGUES` con las ligas que realmente te interesan (EPL=39, LaLiga=140, Serie A=135, Bundesliga=78, etc.) y mantener `INTERVAL_MS` en 60s con `MAX_INTERVAL_MS` en 300–600s.
 
 Despliegue:
 ```

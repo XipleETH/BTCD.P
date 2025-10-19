@@ -405,7 +405,6 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
           </div>
           <div className="col">
             <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
-            <LiquidationCard perpsAddress={perpsAddress} chainKey={chain} />
           </div>
         </section>
       </main>

@@ -2,10 +2,12 @@
 export const deployed = {
   baseSepolia: {
     btcd: { oracle: '0x54105f0f40c6190f982c71836aCc25c91030CADD', perps: '0xa3909Efe241635e4D733054c6929B1FB75840128' },
-    random: { oracle: '0x1194a6CdE8AE282739eC9Eb7E5374aaAb5062309', perps: '0x9d4D25a4aaaa0B613b04bafCa7433C52097eA16E' }
+    random: { oracle: '0x1194a6CdE8AE282739eC9Eb7E5374aaAb5062309', perps: '0x9d4D25a4aaaa0B613b04bafCa7433C52097eA16E' },
+    localaway: { oracle: '0x68aeF7907FAAb44Fb3d2Ceec2E10bA07dAF111c8', perps: '0xa0d7b18811C042ee020de23c0777BE25Aed8B835' }
   },
   base: {
     btcd: { oracle: '', perps: '' },
-    random: { oracle: '', perps: '' }
+    random: { oracle: '', perps: '' },
+    localaway: { oracle: '', perps: '' }
   }
 } as const;

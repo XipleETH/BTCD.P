@@ -65,6 +65,35 @@ MIN_CHANGE=0.01      # 1 basis point (0.01%) para evitar pushes redundantes
 ```
 Ten en cuenta que intervalos muy cortos (p.ej., 1 segundo) podrían gatillar rate limits y/o gas innecesario. Se recomienda 15–60s y habilitar `MIN_CHANGE`.
 
+## Nuevo mercado: Local/Away (goles en vivo)
+Este mercado agrega +1 por cada gol del equipo local y -1 por cada gol del visitante sobre todos los partidos en vivo, partiendo del índice 10000.
+
+Componentes:
+- `LocalAwayOracle.sol` (1e8, >0): oráculo push-based
+- `LocalAwayPerps.sol`: perps sin límites superiores para stops
+- Endpoint Edge `packages/frontend/api/football-live-goals.ts`: consulta API-Football v3
+- Daemon `packages/contracts/scripts/localaway-daemon.ts`: lee el endpoint, computa índice y hace push on-chain
+
+Configurar entorno:
+- En Vercel (frontend): `API_FOOTBALL_KEY` y opcional `API_SECRET`.
+- En Railway u host del daemon: `LOCALAWAY_ORACLE`, `LOCALAWAY_PRIVATE_KEY`, `API_BASE` (URL pública del endpoint Edge), `API_SECRET` (si definido en Vercel), `INGEST_URL`, `INGEST_SECRET`, `CHAIN=base-sepolia`, `MARKET=localaway`.
+
+Despliegue:
+```
+cd packages/contracts
+npm run deploy:localaway -- --network baseSepolia
+```
+Otorga updater al signer del daemon:
+```
+# set KIND=localaway ORACLE=<addr> UPDATER=<daemon_signer>
+npm run grant-updater:localaway -- --network baseSepolia
+```
+Daemon:
+```
+npm run daemon:localaway -- --network baseSepolia
+```
+Frontend: ver pestaña Local/Away (#localaway) junto a BTC.D y Random.
+
 ## Iniciar frontend
 ```
 cd ../../packages/frontend

@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// Query: ?chain=base-sepolia&tf=15m&market=btcd|random
+// Query: ?chain=base-sepolia&tf=15m&market=btcd|random|localaway
 export default async function handler(req: Request): Promise<Response> {
   try {
     const { searchParams } = new URL(req.url)

@@ -722,13 +722,25 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
     const sl = slAbs ? toScaledAbs(slAbs) : 0n
     const tp = tpAbs ? toScaledAbs(tpAbs) : 0n
     if (sl === null || tp === null) return
-    await writeContract({
-      abi: perpsAbi as any,
-      address: perpsAddress as any,
-      functionName: 'setStops',
-      args: [sl as any, tp as any],
-      chainId: desiredChain.id,
-    })
+    try {
+      await writeContract({
+        abi: perpsAbi as any,
+        address: perpsAddress as any,
+        functionName: 'setStops',
+        args: [sl as any, tp as any],
+        chainId: desiredChain.id,
+      })
+    } catch (e:any) {
+      // Fallback: provide a fixed gas limit to bypass estimation issues
+      await writeContract({
+        abi: perpsAbi as any,
+        address: perpsAddress as any,
+        functionName: 'setStops',
+        args: [sl as any, tp as any],
+        chainId: desiredChain.id,
+        gas: 200000n,
+      })
+    }
   }
   const onCloseNow = async () => {
     await writeContract({

@@ -407,6 +407,9 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
           </div>
           <div className="col">
             <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
+            {market === 'localaway' && (
+              <GoalsCard chainKey={chain} />
+            )}
           </div>
         </section>
       </main>
@@ -995,11 +998,6 @@ function PositionCard({ perpsAddress, oracleAddress, market, chainKey }: { perps
       <div className="card-header"><h3>Mi posición</h3></div>
       <div className="card-body">
         <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
-        {market === 'localaway' && (
-          <div className="mt-12">
-            <GoalsFeed chainKey={chainKey} />
-          </div>
-        )}
       </div>
     </div>
   )
@@ -1050,7 +1048,7 @@ function CopyBtn({ text }: { text: string }) {
   return <button className="btn sm" onClick={()=>navigator.clipboard?.writeText(text || '')}>Copiar</button>
 }
 
-function GoalsFeed({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [events, setEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
@@ -1076,10 +1074,11 @@ function GoalsFeed({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   }, [url])
   if (!events.length && !loading) return null
   return (
-    <div>
-      <div className="muted" style={{ marginBottom: 6 }}>Goles recientes</div>
-      <div className="list">
-        {events.map((e, idx) => {
+    <div className="card">
+      <div className="card-header"><h3>Goles (recientes)</h3></div>
+      <div className="card-body">
+        <div className="list">
+          {events.map((e, idx) => {
           const dt = new Date((e.time||0)*1000).toLocaleString()
           const lg = e.meta?.league || '—'
           const home = e.meta?.home?.name || 'Home'
@@ -1088,15 +1087,16 @@ function GoalsFeed({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
           const scAway = e.meta?.score?.away ?? '?'
           const side = e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')
           return (
-            <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-              <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:12, opacity:0.85 }}><strong>{lg}</strong></div>
-                <div style={{ fontSize:14 }}>{home} <strong>{scHome}-{scAway}</strong> {away} {side && <span className="badge" style={{ marginLeft:6 }}>{side}</span>}</div>
+              <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, opacity:0.85 }}><strong>{lg}</strong></div>
+                  <div style={{ fontSize:14 }}>{home} <strong>{scHome}-{scAway}</strong> {away} {side && <span className="badge" style={{ marginLeft:6 }}>{side}</span>}</div>
+                </div>
               </div>
-            </div>
           )
         })}
+        </div>
       </div>
     </div>
   )

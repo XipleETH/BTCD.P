@@ -178,12 +178,14 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestAnswer',
+    chainId: desiredChain.id,
     query: { enabled: Boolean(oracleAddress), refetchInterval: 60000, refetchIntervalInBackground: true }
   })
   const { data: latestTs } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestTimestamp',
+    chainId: desiredChain.id,
     query: { enabled: Boolean(oracleAddress), refetchInterval: 60000, refetchIntervalInBackground: true }
   })
   useEffect(() => {
@@ -351,7 +353,7 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' })
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
+        <RainbowKitProvider initialChain={baseSepolia}>
           <AppContent market={market} />
         </RainbowKitProvider>
       </QueryClientProvider>
@@ -404,7 +406,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
             <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
           </div>
           <div className="col">
-            <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
+            <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
           </div>
         </section>
       </main>
@@ -511,25 +513,29 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
   )
 }
 
-function MyPosition({ perpsAddress, oracleAddress, market }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
+function MyPosition({ perpsAddress, oracleAddress, market, chainKey }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway', chainKey: 'base'|'baseSepolia' }) {
   const { address } = useAccount()
+  const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: pos } = useReadContract({
     abi: perpsAbi as any,
     address: (perpsAddress || undefined) as any,
     functionName: 'positions',
     args: [address!],
+    chainId: desiredChain.id,
     query: { enabled: Boolean(perpsAddress && address), refetchInterval: 15000 }
   }) as { data: any }
   const { data: priceRaw } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestAnswer',
+    chainId: desiredChain.id,
     query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
   })
   const { data: mmBps } = useReadContract({
     abi: perpsAbi as any,
     address: (perpsAddress || undefined) as any,
     functionName: 'maintenanceMarginRatioBps',
+    chainId: desiredChain.id,
     query: { enabled: Boolean(perpsAddress) }
   })
 
@@ -853,11 +859,13 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
   )
 }
 
-function OraclePrice({ oracleAddress, market }: { oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
+function OraclePrice({ oracleAddress, market, chainKey }: { oracleAddress: string, market: 'btcd'|'random'|'localaway', chainKey: 'base'|'baseSepolia' }) {
+  const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data } = useReadContract({
     abi: oracleAbi as any,
     address: (oracleAddress || undefined) as any,
     functionName: 'latestAnswer',
+    chainId: desiredChain.id,
     query: { enabled: Boolean(oracleAddress), refetchInterval: 15000 }
   })
   const pct = typeof data === 'bigint' ? Number(formatUnits(data, 8)) : undefined
@@ -955,7 +963,7 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
       <div className="card-body grid gap-12">
         <div>
           <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : 'Precio Random (oráculo)'}</div>
-          <OraclePrice oracleAddress={oracleAddress} market={market} />
+          <OraclePrice oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         </div>
         <div className="segmented">
           <button className={isLong? 'seg long-btn active':'seg long-btn'} onClick={()=>setIsLong(true)}>Long</button>
@@ -981,12 +989,12 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
   )
 }
 
-function PositionCard({ perpsAddress, oracleAddress, market }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway' }) {
+function PositionCard({ perpsAddress, oracleAddress, market, chainKey }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway', chainKey: 'base'|'baseSepolia' }) {
   return (
     <div className="card">
       <div className="card-header"><h3>Mi posición</h3></div>
       <div className="card-body">
-        <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} />
+        <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
       </div>
     </div>
   )

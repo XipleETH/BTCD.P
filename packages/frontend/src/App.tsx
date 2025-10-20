@@ -1190,18 +1190,23 @@ function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia
         ) : (
           <div className="list">
             {items.map((r, idx)=>{
-              const dt = new Date(r.time*1000).toLocaleString()
+              // Compute step in bps versus the immediately older value (same data as chart)
+              const prev = items[idx+1]?.value
+              const stepBps = (typeof prev === 'number' && prev > 0)
+                ? Math.round(((r.value - prev) / prev) * 10000)
+                : null
+              const sign = stepBps !== null ? (stepBps > 0 ? `+${stepBps}` : `${stepBps}`) : '—'
               const rounded = Math.round(r.value)
-              const rawApprox = Math.round(r.value * 1e8) // aprox entero raw si viene del API
               return (
                 <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
+                  {/* No date, no label; show the number itself with step bps */}
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14 }}>
-                      <span className="badge" style={{ marginRight: 8 }}>random</span>
+                    <div style={{ fontSize:14, display:'flex', alignItems:'baseline', gap:8 }}>
                       <strong>{r.value.toFixed(4)}</strong>
-                      <span className="muted small" style={{ marginLeft: 8 }}>≈ {rounded}</span>
-                      <span className="mono small" style={{ marginLeft: 8, opacity: 0.8 }}>raw≈{rawApprox}</span>
+                      <span className={stepBps !== null ? (stepBps >= 0 ? 'pnl up small' : 'pnl down small') : 'muted small'}>
+                        ({sign} bps)
+                      </span>
+                      <span className="muted small">≈ {rounded}</span>
                     </div>
                   </div>
                 </div>

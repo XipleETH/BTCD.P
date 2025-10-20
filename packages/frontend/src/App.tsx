@@ -111,7 +111,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     const lsKey = `btcd:candles:${key}:${market}:${tf}`
   // Use serverless API endpoint backed by DB
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}`
+  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}${market==='localaway' ? '&metric=delta' : ''}`
     const load = async () => {
       try {
         // localStorage bootstrap
@@ -151,7 +151,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   const key = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
   const lsKey = `btcd:candles:${key}:${market}:${tf}`
     const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}`
+  const url = `${baseUrl}/api/candles?chain=${key}&tf=${tf}&market=${market}${market==='localaway' ? '&metric=delta' : ''}`
     let t: number | undefined
     const tick = async () => {
       try {

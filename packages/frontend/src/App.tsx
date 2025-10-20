@@ -1064,6 +1064,18 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
           const j = await res.json()
           const evs = Array.isArray(j.events) ? j.events.filter((e:any)=> e?.meta?.type === 'goal') : []
           if (!cancel) setEvents(evs)
+          // Fallback: if empty, try alternate chain key once
+          if (!cancel && (!evs || evs.length === 0)) {
+            const alt = chain === 'base-sepolia' ? 'base' : 'base-sepolia'
+            try {
+              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=20`, { cache: 'no-store' })
+              if (res2.ok) {
+                const j2 = await res2.json()
+                const evs2 = Array.isArray(j2.events) ? j2.events.filter((e:any)=> e?.meta?.type === 'goal') : []
+                if (!cancel && evs2.length) setEvents(evs2)
+              }
+            } catch {}
+          }
         }
       } catch {}
       setLoading(false)
@@ -1072,12 +1084,14 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
     const t = window.setInterval(load, 60000)
     return () => { cancel = true; window.clearInterval(t) }
   }, [url])
-  if (!events.length && !loading) return null
   return (
     <div className="card">
       <div className="card-header"><h3>Goles (recientes)</h3></div>
       <div className="card-body">
-        <div className="list">
+        {!events.length && !loading ? (
+          <div className="muted">No hay goles recientes.</div>
+        ) : (
+          <div className="list">
           {events.map((e, idx) => {
           const dt = new Date((e.time||0)*1000).toLocaleString()
           const lg = e.meta?.league || '—'
@@ -1096,7 +1110,8 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               </div>
           )
         })}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

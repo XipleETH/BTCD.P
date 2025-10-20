@@ -1125,7 +1125,7 @@ function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/events?chain=${chain}&market=random&limit=30`
+  const url = `${baseUrl}/api/events?chain=${chain}&market=random&limit=30&oracle=${encodeURIComponent(oracleAddress||'')}`
   useEffect(() => {
     let cancel = false
     const load = async () => {

@@ -16,7 +16,7 @@ export default async function handler(req: Request): Promise<Response> {
     const redis = Redis.fromEnv()
     // Build points from Redis based on requested market/metric
     const points: Array<{ time: number; value: number }> = []
-    if (market === 'localaway' && metric === 'delta') {
+  if (market === 'localaway' && metric === 'delta') {
       // For localaway delta view: build +1/-1/0 from events list
       const eventsKey = `btcd:events:${chain}:${market}`
       // Grab more than default to cover longer timeframes
@@ -37,6 +37,19 @@ export default async function handler(req: Request): Promise<Response> {
           }
           points.push({ time: t, value: v })
         } catch {}
+      }
+      // Fallback: if no event-derived points (e.g., ingest wrote only ticks), use ticks directly
+      if (points.length === 0) {
+        const ticksKey = `btcd:ticks:${chain}:${market}`
+        const N = 10000
+        const arr = await redis.zrange<[string | number]>(ticksKey, -N, -1, { withScores: true })
+        for (let i = 0; i < arr.length; i += 2) {
+          const member = arr[i] as string
+          const score = Number(arr[i+1])
+          const value = typeof member === 'string' ? Number(member) : Number(member)
+          if (!Number.isFinite(score) || !Number.isFinite(value)) continue
+          points.push({ time: Math.floor(score), value })
+        }
       }
     } else {
       // Default: use ticks ZSET (absolute index/price)

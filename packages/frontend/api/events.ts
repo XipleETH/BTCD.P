@@ -103,9 +103,9 @@ export default async function handler(req: Request): Promise<Response> {
             const parsed: any[] = []
             for (const l of logs) {
               const data: string = l?.data || '0x'
-              // Expect 64 bytes price + 64 bytes timestamp = 128 bytes (256 hex chars) after 0x
+              // Expect 32 bytes price + 32 bytes timestamp = 64 bytes (128 hex chars) after 0x
               const s = data.startsWith('0x') ? data.slice(2) : data
-              if (s.length < 128 * 2) continue
+              if (s.length < 64 * 2) continue
               const priceHex = '0x' + s.slice(0, 64)
               const tsHex = '0x' + s.slice(64, 128)
               const price = hexToBigIntSigned(priceHex)

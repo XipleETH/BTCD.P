@@ -21,7 +21,51 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: out })
     }
 
-    // Fallback: if no cached events, try querying our Edge live-goals endpoint in full mode (may use multiple API calls)
+    // If market=random, fallback to ZSET ticks to build a simple recent numbers feed
+    if (market === 'random') {
+      try {
+        const ticksKey = `btcd:ticks:${chain}:${market}`
+        // Get last N by rank, with scores (timestamps)
+        // Prefer newest first; if not supported, we'll sort after
+        let pairs: any[] = []
+        try {
+          // Upstash supports zrange with rev/withScores
+          // @ts-ignore - library typing may vary
+          pairs = await (redis as any).zrange(ticksKey, -limit, -1, { withScores: true })
+        } catch {
+          try {
+            // Alternative: fetch head and trim
+            // @ts-ignore
+            pairs = await (redis as any).zrange(ticksKey, 0, limit - 1, { withScores: true, rev: true })
+          } catch {}
+        }
+        const events = Array.isArray(pairs)
+          ? pairs.map((p:any)=>{
+              const member = Array.isArray(p) ? p[0] : p?.member
+              const score = Array.isArray(p) ? p[1] : p?.score
+              const val = Number(member)
+              const ts = Number(score)
+              return { time: Math.floor(ts), value: val, meta: { type: 'random' } }
+            }).filter((e:any)=> Number.isFinite(e?.time) && Number.isFinite(e?.value))
+          : []
+        // Sort newest first and cap limit
+        events.sort((a:any,b:any)=> b.time - a.time)
+        const recent = events.slice(0, limit)
+        if (recent.length) {
+          // Mirror to events list (newest-first at head)
+          try {
+            for (let i = recent.length - 1; i >= 0; i--) {
+              await redis.lpush(eventsKey, JSON.stringify(recent[i]))
+            }
+            await redis.ltrim(eventsKey, 0, 499)
+          } catch {}
+        }
+        return json({ events: recent })
+      } catch {}
+      return json({ events: [] })
+    }
+
+    // Fallback: if no cached events for localaway, try querying our Edge live-goals endpoint in full mode (may use multiple API calls)
     // Only do this when market=localaway; otherwise return empty
     if (market !== 'localaway') return json({ events: [] })
 

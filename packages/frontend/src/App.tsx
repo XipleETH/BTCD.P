@@ -410,6 +410,9 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
             {market === 'localaway' && (
               <GoalsCard chainKey={chain} />
             )}
+            {market === 'random' && (
+              <RandomCard chainKey={chain} />
+            )}
           </div>
         </section>
       </main>
@@ -1110,6 +1113,63 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               </div>
           )
         })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RandomCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+  const [items, setItems] = useState<Array<{ time:number, value:number }>>([])
+  const [loading, setLoading] = useState(false)
+  const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
+  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+  const url = `${baseUrl}/api/events?chain=${chain}&market=random&limit=30`
+  useEffect(() => {
+    let cancel = false
+    const load = async () => {
+      try {
+        setLoading(true)
+        const res = await fetch(url, { cache: 'no-store' })
+        if (res.ok) {
+          const j = await res.json()
+          const evs = Array.isArray(j.events) ? j.events : []
+          // Normalize to time/value only, newest-first
+          const rows = evs.map((e:any)=> ({ time: Number(e?.time)||0, value: Number(e?.value) }))
+            .filter((r: { time:number, value:number })=> Number.isFinite(r.time) && Number.isFinite(r.value))
+            .sort((a: { time:number }, b: { time:number })=> b.time - a.time)
+          if (!cancel) setItems(rows)
+        }
+      } catch {}
+      setLoading(false)
+    }
+    load()
+    const t = window.setInterval(load, 60000)
+    return () => { cancel = true; window.clearInterval(t) }
+  }, [url])
+  return (
+    <div className="card">
+      <div className="card-header"><h3>Números aleatorios (recientes)</h3></div>
+      <div className="card-body">
+        {!items.length && !loading ? (
+          <div className="muted">No hay números recientes.</div>
+        ) : (
+          <div className="list">
+            {items.map((r, idx)=>{
+              const dt = new Date(r.time*1000).toLocaleString()
+              return (
+                <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14 }}>
+                      <span className="badge" style={{ marginRight: 8 }}>random</span>
+                      <strong>{r.value.toFixed(4)}</strong>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

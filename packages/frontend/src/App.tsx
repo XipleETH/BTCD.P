@@ -411,7 +411,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
               <GoalsCard chainKey={chain} />
             )}
             {market === 'random' && (
-              <RandomCard chainKey={chain} />
+              <RandomCard chainKey={chain} oracleAddress={oracleAddress} />
             )}
           </div>
         </section>
@@ -1120,7 +1120,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   )
 }
 
-function RandomCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia', oracleAddress: string }) {
   const [items, setItems] = useState<Array<{ time:number, value:number }>>([])
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
@@ -1140,6 +1140,39 @@ function RandomCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
             .filter((r: { time:number, value:number })=> Number.isFinite(r.time) && Number.isFinite(r.value))
             .sort((a: { time:number }, b: { time:number })=> b.time - a.time)
           if (!cancel) setItems(rows)
+          // Fallback to on-chain logs if empty or missing
+          if (!cancel && (!rows || rows.length === 0) && oracleAddress) {
+            try {
+              const desired = (chainKey === 'baseSepolia' ? baseSepolia : base)
+              const client = createPublicClient({ chain: desired as any, transport: viemHttp() })
+              const latest = await client.getBlockNumber()
+              // scan ~20k blocks back (tweakable)
+              const from = latest > 20000n ? (latest - 20000n) : 0n
+              const logs = await client.getLogs({
+                address: oracleAddress as any,
+                events: [{
+                  type: 'event',
+                  name: 'PriceUpdated',
+                  inputs: [
+                    { name: 'price', type: 'int256', indexed: false },
+                    { name: 'timestamp', type: 'uint256', indexed: false },
+                  ],
+                  anonymous: false,
+                }] as any,
+                fromBlock: from,
+                toBlock: latest,
+              }) as any[]
+              const mapped = logs.map((l:any)=>{
+                const args = l?.args || {}
+                const raw = typeof args?.price === 'bigint' ? args.price : BigInt(args?.price || 0)
+                const ts = Number(args?.timestamp || 0)
+                const dec = Number(formatUnits(raw, 8))
+                return { time: ts, value: dec, _raw: raw }
+              }).filter((r:any)=> Number.isFinite(r.time) && Number.isFinite(r.value))
+                .sort((a:any,b:any)=> b.time - a.time)
+              if (!cancel && mapped.length) setItems(mapped)
+            } catch {}
+          }
         }
       } catch {}
       setLoading(false)
@@ -1158,6 +1191,8 @@ function RandomCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
           <div className="list">
             {items.map((r, idx)=>{
               const dt = new Date(r.time*1000).toLocaleString()
+              const rounded = Math.round(r.value)
+              const rawApprox = Math.round(r.value * 1e8) // aprox entero raw si viene del API
               return (
                 <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                   <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
@@ -1165,6 +1200,8 @@ function RandomCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
                     <div style={{ fontSize:14 }}>
                       <span className="badge" style={{ marginRight: 8 }}>random</span>
                       <strong>{r.value.toFixed(4)}</strong>
+                      <span className="muted small" style={{ marginLeft: 8 }}>≈ {rounded}</span>
+                      <span className="mono small" style={{ marginLeft: 8, opacity: 0.8 }}>raw≈{rawApprox}</span>
                     </div>
                   </div>
                 </div>

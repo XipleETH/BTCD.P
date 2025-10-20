@@ -26,12 +26,17 @@ export default async function handler(req: Request): Promise<Response> {
         await redis.del(ticksKey)
         return resp(200, { ok: true, action: 'del', key: ticksKey })
       }
-    // Store as ZSET score=time, member=value (as string)
+    // Store as ZSET score=time, member=value (as string) — this powers candles
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
     // Optionally store metadata in a capped list (last 500 events)
     if (meta && typeof meta === 'object') {
       try {
-        const payload = { time: Math.floor(time), value, meta }
+        // For "no-goal" ticks, persist value=0 in events to represent a neutral delta,
+        // while keeping the absolute index in the ticks ZSET above for chart continuity.
+        const valueForEvent = (String(meta?.type).toLowerCase() === 'tick' && String(meta?.note).toLowerCase() === 'no-goal')
+          ? 0
+          : value
+        const payload = { time: Math.floor(time), value: valueForEvent, meta }
         await redis.lpush(eventsKey, JSON.stringify(payload))
         await redis.ltrim(eventsKey, 0, 499)
       } catch {}

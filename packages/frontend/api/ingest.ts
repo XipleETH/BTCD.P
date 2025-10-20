@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// POST { secret, chain, market, time, value }
+// POST { secret, chain, market, time, value, meta? }
 export default async function handler(req: Request): Promise<Response> {
   try {
     if (req.method !== 'POST') return resp(405, { error: 'method' })
@@ -12,13 +12,15 @@ export default async function handler(req: Request): Promise<Response> {
     const chain = String(body?.chain || 'base-sepolia').toLowerCase()
     const market = String(body?.market || 'btcd').toLowerCase()
     const mode = String(body?.mode || '').toLowerCase()
-    const time = Number(body?.time)
-    const value = Number(body?.value)
+  const time = Number(body?.time)
+  const value = Number(body?.value)
+  const meta = body?.meta
     if (!Number.isFinite(time) || !Number.isFinite(value)) return resp(400, { error: 'invalid payload' })
 
     const redis = Redis.fromEnv()
     // Per-market keying so datasets don't mix
-    const ticksKey = `btcd:ticks:${chain}:${market}`
+  const ticksKey = `btcd:ticks:${chain}:${market}`
+  const eventsKey = `btcd:events:${chain}:${market}`
       // Optional delete mode to clear a series quickly
       if (mode === 'del') {
         await redis.del(ticksKey)
@@ -26,6 +28,14 @@ export default async function handler(req: Request): Promise<Response> {
       }
     // Store as ZSET score=time, member=value (as string)
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
+    // Optionally store metadata in a capped list (last 500 events)
+    if (meta && typeof meta === 'object') {
+      try {
+        const payload = { time: Math.floor(time), value, meta }
+        await redis.lpush(eventsKey, JSON.stringify(payload))
+        await redis.ltrim(eventsKey, 0, 499)
+      } catch {}
+    }
     // Trim to last 10000
     const len = await redis.zcard(ticksKey)
     if ((len || 0) > 11000) {

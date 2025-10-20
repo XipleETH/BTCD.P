@@ -12,6 +12,8 @@ import axios from 'axios'
 //  MARKET=localaway (default)
 //  INTERVAL_MS (base poll cadence; default 60000 = 1 min)
 //  MAX_INTERVAL_MS (optional upper bound for dynamic backoff; default 300000 = 5 min)
+//  ALWAYS_POLL_EVERY_MINUTE=true (disable backoff and keep fixed cadence)
+//  PUSH_EVERY_TICK=true (push on-chain even if no goals to keep chart continuity)
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)) }
 
@@ -58,6 +60,8 @@ async function main() {
   // 1-minute cadence by default (base), with optional dynamic backoff up to MAX_INTERVAL_MS
   const baseInterval = Number(process.env.INTERVAL_MS || '60000')
   const maxInterval = Number(process.env.MAX_INTERVAL_MS || '300000')
+  const alwaysPollEveryMinute = String(process.env.ALWAYS_POLL_EVERY_MINUTE || 'true').toLowerCase() === 'true'
+  const pushEveryTick = String(process.env.PUSH_EVERY_TICK || 'true').toLowerCase() === 'true'
   let currentInterval = baseInterval
 
   // Optional DB ingest for shared chart
@@ -84,59 +88,118 @@ async function main() {
       // Fetch lite fixtures (scores only) from the Edge API
       const fixtures = await fetchLiteFixtures(apiBase, apiSecret)
       // Compute deltas by comparing current scores vs last tick
-      let homeDelta = 0
-      let awayDelta = 0
+      let totalHomeDelta = 0
+      let totalAwayDelta = 0
+      // Process per fixture and push one tx per goal
       for (const f of fixtures) {
         const id = Number(f?.id)
         if (!id) continue
         const curHome = Number(f?.home?.goals ?? 0) || 0
         const curAway = Number(f?.away?.goals ?? 0) || 0
         const prev = lastScores.get(id) || { home: curHome, away: curAway }
+        let stepHome = prev.home
+        let stepAway = prev.away
         const dHome = Math.max(0, curHome - prev.home)
         const dAway = Math.max(0, curAway - prev.away)
+        // Log snapshot
         if (dHome > 0 || dAway > 0) {
           console.log(new Date().toISOString(), `[SCORE] ${f?.league?.name ?? 'League'}: ${f?.home?.name ?? 'Home'} ${curHome}-${curAway} ${f?.away?.name ?? 'Away'} (Δ +${dHome}/-${dAway})`)
         }
-        homeDelta += dHome
-        awayDelta += dAway
+        // For each home goal, push a separate tx and ingest meta
+        for (let i = 0; i < dHome; i++) {
+          stepHome += 1
+          totalHomeDelta += 1
+          // Update index incrementally: +1
+          currentIndex = currentIndex + 1
+          const scaled = toScaled(currentIndex)
+          const tx = await oracle.pushPrice(scaled)
+          await tx.wait()
+          console.log(new Date().toISOString(), 'index', currentIndex, 'tx', tx.hash, `(goal +1)`)
+          // sync to DB for chart with metadata
+          if (ingestUrl && ingestSecret) {
+            try {
+              const time = Math.floor(Date.now() / 1000)
+              const value = currentIndex
+              const meta = {
+                type: 'goal', side: 'home', fixtureId: id,
+                league: f?.league?.name, leagueId: f?.league?.id,
+                home: { id: f?.home?.id, name: f?.home?.name },
+                away: { id: f?.away?.id, name: f?.away?.name },
+                score: { home: stepHome, away: stepAway }
+              }
+              await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+            } catch (e: any) {
+              console.warn('ingest sync failed', e?.message || e)
+            }
+          }
+        }
+        // For each away goal, push a separate tx and ingest meta
+        for (let i = 0; i < dAway; i++) {
+          stepAway += 1
+          totalAwayDelta += 1
+          // Update index incrementally: -1
+          currentIndex = currentIndex - 1
+          if (currentIndex < 1) currentIndex = 1
+          const scaled = toScaled(currentIndex)
+          const tx = await oracle.pushPrice(scaled)
+          await tx.wait()
+          console.log(new Date().toISOString(), 'index', currentIndex, 'tx', tx.hash, `(goal -1)`)
+          if (ingestUrl && ingestSecret) {
+            try {
+              const time = Math.floor(Date.now() / 1000)
+              const value = currentIndex
+              const meta = {
+                type: 'goal', side: 'away', fixtureId: id,
+                league: f?.league?.name, leagueId: f?.league?.id,
+                home: { id: f?.home?.id, name: f?.home?.name },
+                away: { id: f?.away?.id, name: f?.away?.name },
+                score: { home: stepHome, away: stepAway }
+              }
+              await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+            } catch (e: any) {
+              console.warn('ingest sync failed', e?.message || e)
+            }
+          }
+        }
+        // Store final observed score
         lastScores.set(id, { home: curHome, away: curAway, homeName: f?.home?.name, awayName: f?.away?.name, leagueName: f?.league?.name })
       }
 
-      // If no new goals in this period, sleep and continue without on-chain tx
-      if (homeDelta === 0 && awayDelta === 0) {
-        console.log(new Date().toISOString(), 'no new goals — sleeping', currentInterval, 'ms')
-        await sleep(currentInterval)
-        // increase interval with gentle backoff, capped
-        currentInterval = Math.min(Math.floor(currentInterval * 1.5), maxInterval)
-        continue
-      }
-
-      // Update index incrementally: +1 per home goal, -1 per away goal
-      currentIndex = currentIndex + homeDelta - awayDelta
-      if (currentIndex < 1) currentIndex = 1
-
-      // Optional: could log per-fixture score deltas above; already logged
-
-      // Push new index on-chain
-      const scaled = toScaled(currentIndex)
-      const tx = await oracle.pushPrice(scaled)
-      await tx.wait()
-      console.log(new Date().toISOString(), 'index', currentIndex, 'tx', tx.hash, `(Δ +${homeDelta} / -${awayDelta})`)
-
-      // sync to DB for chart
-      if (ingestUrl && ingestSecret) {
-        try {
-          const time = Math.floor(Date.now() / 1000)
-          const value = currentIndex
-          await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value }, { timeout: 8000 })
-        } catch (e: any) {
-          console.warn('ingest sync failed', e?.message || e)
+      // If no new goals in this period
+      if (totalHomeDelta === 0 && totalAwayDelta === 0) {
+        if (pushEveryTick) {
+          // Push same index to keep chart continuity
+          const scaled = toScaled(currentIndex)
+          const tx = await oracle.pushPrice(scaled)
+          await tx.wait()
+          console.log(new Date().toISOString(), 'no-goal tick pushed', 'index', currentIndex, 'tx', tx.hash)
+          if (ingestUrl && ingestSecret) {
+            try {
+              const time = Math.floor(Date.now() / 1000)
+              const value = currentIndex
+              const meta = { type: 'tick', note: 'no-goal' }
+              await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+            } catch (e: any) {
+              console.warn('ingest sync failed', e?.message || e)
+            }
+          }
+        } else {
+          console.log(new Date().toISOString(), 'no new goals — skip on-chain push this interval')
         }
       }
+
+      // All pushes are handled per-goal above; if no goals we optionally pushed a no-goal tick.
       // reset interval back to base after activity
       currentInterval = baseInterval
     } catch (e: any) {
       console.error('tick error', e?.message || e)
+    }
+    // cadence control
+    if (alwaysPollEveryMinute) {
+      currentInterval = baseInterval
+    } else {
+      // if no goals were found last loop and not forcing per-minute, allow backoff
+      currentInterval = Math.min(Math.floor(currentInterval * 1.5), maxInterval)
     }
     await sleep(currentInterval)
   }

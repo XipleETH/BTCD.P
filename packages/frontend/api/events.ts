@@ -26,32 +26,21 @@ export default async function handler(req: Request): Promise<Response> {
     if (market === 'random') {
       try {
         const ticksKey = `btcd:ticks:${chain}:${market}`
-        // Get last N by rank, with scores (timestamps)
-        // Prefer newest first; if not supported, we'll sort after
-        let pairs: any[] = []
-        try {
-          // Upstash supports zrange with rev/withScores
-          // @ts-ignore - library typing may vary
-          pairs = await (redis as any).zrange(ticksKey, -limit, -1, { withScores: true })
-        } catch {
-          try {
-            // Alternative: fetch head and trim
-            // @ts-ignore
-            pairs = await (redis as any).zrange(ticksKey, 0, limit - 1, { withScores: true, rev: true })
-          } catch {}
+        // Read like /api/candles does: Upstash returns flat array [member, score, member, score, ...]
+        // Grab a wider window then cap to "limit" newest
+        const windowN = Math.max(limit * 5, limit)
+        const arr = await redis.zrange<[string | number]>(ticksKey, -windowN, -1, { withScores: true })
+        const points: Array<{ time: number; value: number }> = []
+        for (let i = 0; i < arr.length; i += 2) {
+          const member = arr[i] as string
+          const score = Number(arr[i+1])
+          const value = typeof member === 'string' ? Number(member) : Number(member)
+          if (!Number.isFinite(score) || !Number.isFinite(value)) continue
+          points.push({ time: Math.floor(score), value })
         }
-        const events = Array.isArray(pairs)
-          ? pairs.map((p:any)=>{
-              const member = Array.isArray(p) ? p[0] : p?.member
-              const score = Array.isArray(p) ? p[1] : p?.score
-              const val = Number(member)
-              const ts = Number(score)
-              return { time: Math.floor(ts), value: val, meta: { type: 'random' } }
-            }).filter((e:any)=> Number.isFinite(e?.time) && Number.isFinite(e?.value))
-          : []
-        // Sort newest first and cap limit
-        events.sort((a:any,b:any)=> b.time - a.time)
-        const recent = events.slice(0, limit)
+        // Newest first and cap
+        points.sort((a,b)=> b.time - a.time)
+        const recent = points.slice(0, limit).map(p => ({ time: p.time, value: p.value, meta: { type: 'random' } }))
         if (recent.length) {
           // Mirror to events list (newest-first at head)
           try {

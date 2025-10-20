@@ -339,7 +339,7 @@ const queryClient = new QueryClient()
 function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' }) {
   const market: 'btcd'|'random'|'localaway' = routeMarket
   const config = useMemo(() => getDefaultConfig({
-    appName: 'BTCD Perps',
+    appName: 'Perp-it',
     projectId: 'btcd-temp',
     chains: [base, baseSepolia],
     transports: {
@@ -378,7 +378,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
         <div className="header-left">
-          <div className="brand">BTC Dominance Perps</div>
+          <div className="brand">Perp-it</div>
           <div className="network-switcher" style={{ marginLeft: 8 }}>
             <span className="label">Page</span>
             <div className="segmented">

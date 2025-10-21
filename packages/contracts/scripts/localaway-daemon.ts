@@ -92,71 +92,112 @@ async function main() {
 
   while (true) {
     try {
-      // FOOTBALL: single upstream call; apply +/-0.1% per goal per game (one tx per game)
-      const fixtures = await fetchLiteFixtures(apiBase, apiSecret)
       let footballActivity = 0
-      for (const f of fixtures) {
-        const id = Number(f?.id); if (!id) continue
-        const curHome = Number(f?.home?.goals ?? 0) || 0
-        const curAway = Number(f?.away?.goals ?? 0) || 0
-        // try remote last if memory empty
-        let prev = lastFootball.get(id)
-        if (!prev && lastApi && ingestSecret) {
-          try {
-            const u = new URL(lastApi)
-            u.searchParams.set('secret', ingestSecret)
-            u.searchParams.set('sport', 'football')
-            u.searchParams.set('fixture', String(id))
-            const r = await axios.get(u.toString(), { timeout: 8000 })
-            if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
-              prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+      let anyActivity = false
+      const aggregatorMode = apiBase.includes('/api/sports-live')
+      if (aggregatorMode) {
+        // One consolidated call: /api/sports-live
+        try {
+          const u = new URL(apiBase)
+          if (apiSecret) u.searchParams.set('secret', apiSecret)
+          u.searchParams.set('chain', chain)
+          const resp = await axios.get(u.toString(), { timeout: 20000 })
+          const items = Array.isArray(resp.data?.items) ? resp.data.items : []
+          for (const it of items) {
+            const sport = String(it?.sport || '')
+            const id = Number(it?.fixtureId || 0); if (!id) continue
+            const dHome = Number(it?.delta?.home || 0) || 0
+            const dAway = Number(it?.delta?.away || 0) || 0
+            const netPct = Number(it?.deltaPct || 0) || 0
+            if (!dHome && !dAway) continue
+            if (sport === 'football') footballActivity++
+            anyActivity = true
+            currentIndex = Math.max(1, currentIndex * (1 + netPct))
+            const scaled = toScaled(currentIndex)
+            const tx = await oracle.pushPrice(scaled)
+            await tx.wait()
+            console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            if (ingestUrl && ingestSecret) {
+              try {
+                const time = Math.floor(Date.now()/1000)
+                const value = currentIndex
+                const meta = { type:'point', sport, fixtureId: id, league: it?.league, leagueId: it?.leagueId, home: it?.home, away: it?.away, score: it?.score, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+              } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
-          } catch {}
+            // update local maps for visibility
+            if (sport === 'football') lastFootball.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
+            if (sport === 'basketball') lastBasket.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
+            if (sport === 'volleyball') lastVolley.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
+            if (sport === 'handball') lastHand.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
+          }
+        } catch (e:any) {
+          console.warn('aggregator fetch failed', e?.message || e)
         }
-        prev = prev || { home: curHome, away: curAway }
-        const dHome = Math.max(0, curHome - prev.home)
-        const dAway = Math.max(0, curAway - prev.away)
-        if (dHome === 0 && dAway === 0) continue
-        footballActivity++
-        const netPct = (dHome * 0.001) - (dAway * 0.001) // 0.1% per goal
-        // apply multiplicative change
-        currentIndex = Math.max(1, currentIndex * (1 + netPct))
-        const scaled = toScaled(currentIndex)
-        const tx = await oracle.pushPrice(scaled)
-        await tx.wait()
-        console.log(new Date().toISOString(), `[FOOTBALL] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
-        if (ingestUrl && ingestSecret) {
-          try {
-            const time = Math.floor(Date.now() / 1000)
-            const value = currentIndex
-            const meta = {
-              type: 'point', sport: 'football', fixtureId: id,
-              league: f?.league?.name, leagueId: (f as any)?.league?.id,
-              home: { id: f?.home?.id, name: f?.home?.name },
-              away: { id: f?.away?.id, name: f?.away?.name },
-              score: { home: curHome, away: curAway },
-              delta: { home: dHome, away: dAway },
-              deltaPct: netPct
-            }
-            await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
-          } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+      } else {
+        // FOOTBALL: single upstream call; apply +/-0.1% per goal per game (one tx per game)
+        const fixtures = await fetchLiteFixtures(apiBase, apiSecret)
+        for (const f of fixtures) {
+          const id = Number(f?.id); if (!id) continue
+          const curHome = Number(f?.home?.goals ?? 0) || 0
+          const curAway = Number(f?.away?.goals ?? 0) || 0
+          // try remote last if memory empty
+          let prev = lastFootball.get(id)
+          if (!prev && lastApi && ingestSecret) {
+            try {
+              const u = new URL(lastApi)
+              u.searchParams.set('secret', ingestSecret)
+              u.searchParams.set('sport', 'football')
+              u.searchParams.set('fixture', String(id))
+              const r = await axios.get(u.toString(), { timeout: 8000 })
+              if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+              }
+            } catch {}
+          }
+          prev = prev || { home: curHome, away: curAway }
+          const dHome = Math.max(0, curHome - prev.home)
+          const dAway = Math.max(0, curAway - prev.away)
+          if (dHome === 0 && dAway === 0) continue
+          footballActivity++
+          anyActivity = true
+          const netPct = (dHome * 0.001) - (dAway * 0.001) // 0.1% per goal
+          currentIndex = Math.max(1, currentIndex * (1 + netPct))
+          const scaled = toScaled(currentIndex)
+          const tx = await oracle.pushPrice(scaled)
+          await tx.wait()
+          console.log(new Date().toISOString(), `[FOOTBALL] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+          if (ingestUrl && ingestSecret) {
+            try {
+              const time = Math.floor(Date.now() / 1000)
+              const value = currentIndex
+              const meta = {
+                type: 'point', sport: 'football', fixtureId: id,
+                league: f?.league?.name, leagueId: (f as any)?.league?.id,
+                home: { id: f?.home?.id, name: f?.home?.name },
+                away: { id: f?.away?.id, name: f?.away?.name },
+                score: { home: curHome, away: curAway },
+                delta: { home: dHome, away: dAway },
+                deltaPct: netPct
+              }
+              await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+            } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+          }
+          lastFootball.set(id, { home: curHome, away: curAway, homeName: f?.home?.name, awayName: f?.away?.name, leagueName: f?.league?.name })
+          if (lastApi && ingestSecret) {
+            try {
+              await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 })
+            } catch {}
+          }
         }
-        lastFootball.set(id, { home: curHome, away: curAway, homeName: f?.home?.name, awayName: f?.away?.name, leagueName: f?.league?.name })
-        // persist last snapshot for cross-restarts
-        if (lastApi && ingestSecret) {
-          try {
-            await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 })
-          } catch {}
-        }
-      }
 
-      // SCHEDULED SPORTS every 15 minutes
-      const now = new Date(); const minute = now.getUTCMinutes(); // use UTC to be consistent
-      const processBasket = [5,20,35,50].includes(minute)
-      const processVolley  = [10,25,40,55].includes(minute)
-      const processHand    = [0,15,30,45].includes(minute)
+        // SCHEDULED SPORTS every 15 minutes
+        const now = new Date(); const minute = now.getUTCMinutes(); // use UTC to be consistent
+        const processBasket = [5,20,35,50].includes(minute)
+        const processVolley  = [10,25,40,55].includes(minute)
+        const processHand    = [0,15,30,45].includes(minute)
 
-      const headers = apiKey ? { 'x-apisports-key': apiKey, 'accept':'application/json' } : undefined
+        const headers = apiKey ? { 'x-apisports-key': apiKey, 'accept':'application/json' } : undefined
 
       // BASKETBALL: 0.001% per point (home +, away -), one tx per game
       if (processBasket && apiKey) {
@@ -197,6 +238,7 @@ async function main() {
             const tx = await oracle.pushPrice(scaled)
             await tx.wait()
             console.log(new Date().toISOString(), `[BASKET] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
@@ -250,6 +292,7 @@ async function main() {
             const tx = await oracle.pushPrice(scaled)
             await tx.wait()
             console.log(new Date().toISOString(), `[VOLLEY] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
@@ -301,6 +344,7 @@ async function main() {
             const tx = await oracle.pushPrice(scaled)
             await tx.wait()
             console.log(new Date().toISOString(), `[HANDBALL] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
@@ -317,8 +361,10 @@ async function main() {
         } catch (e:any) { console.warn('handball fetch failed', e?.message || e) }
       }
 
-      // If no sport activity and configured to push continuity tick
-      if (footballActivity === 0 && !processBasket && !processVolley && !processHand) {
+      }
+
+  // If no sport activity across any sport and configured to push continuity tick
+  if (!anyActivity) {
         if (pushEveryTick) {
           const scaled = toScaled(currentIndex)
           const tx = await oracle.pushPrice(scaled)

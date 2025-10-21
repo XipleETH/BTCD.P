@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// POST { secret, chain, market, time, value, meta? }
+// POST { secret, chain, market, time, value, meta?, mode? }
 export default async function handler(req: Request): Promise<Response> {
   try {
     if (req.method !== 'POST') return resp(405, { error: 'method' })
@@ -24,16 +24,20 @@ export default async function handler(req: Request): Promise<Response> {
       // Optional delete mode to clear a series quickly
       if (mode === 'del') {
         await redis.del(ticksKey)
-        return resp(200, { ok: true, action: 'del', key: ticksKey })
+        await redis.del(eventsKey)
+        return resp(200, { ok: true, action: 'del', ticksKey, eventsKey })
       }
     // Store as ZSET score=time, member=value (as string) — this powers candles
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
     // Optionally store metadata in a capped list (last 500 events)
     if (meta && typeof meta === 'object') {
       try {
+        // add sport emoji if not present
+        const emoji = emojiForSport(String(meta?.sport || ''))
+        if (emoji && !meta.emoji) meta.emoji = emoji
         // For "no-goal" ticks, persist value=0 in events to represent a neutral delta,
         // while keeping the absolute index in the ticks ZSET above for chart continuity.
-        const valueForEvent = (String(meta?.type).toLowerCase() === 'tick' && String(meta?.note).toLowerCase() === 'no-goal')
+        const valueForEvent = (String(meta?.type).toLowerCase() === 'tick' && ['no-goal','no-activity'].includes(String(meta?.note).toLowerCase()))
           ? 0
           : value
         const payload = { time: Math.floor(time), value: valueForEvent, meta }
@@ -54,4 +58,15 @@ export default async function handler(req: Request): Promise<Response> {
 
 function resp(status: number, body: any): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+}
+
+function emojiForSport(sport: string): string | undefined {
+  const m: Record<string, string> = {
+    football: '⚽️', soccer: '⚽️',
+    basketball: '🏀',
+    volleyball: '🏐',
+    handball: '🤾',
+    random: '🎲'
+  }
+  return m[sport.toLowerCase()]
 }

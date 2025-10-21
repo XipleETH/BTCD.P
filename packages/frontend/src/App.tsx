@@ -1056,7 +1056,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=20`
+  const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=30`
   useEffect(() => {
     let cancel = false
     const load = async () => {
@@ -1065,16 +1065,16 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
         const res = await fetch(url, { cache: 'no-store' })
         if (res.ok) {
           const j = await res.json()
-          const evs = Array.isArray(j.events) ? j.events.filter((e:any)=> e?.meta?.type === 'goal') : []
+          const evs = Array.isArray(j.events) ? j.events : []
           if (!cancel) setEvents(evs)
           // Fallback: if empty, try alternate chain key once
           if (!cancel && (!evs || evs.length === 0)) {
             const alt = chain === 'base-sepolia' ? 'base' : 'base-sepolia'
             try {
-              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=20`, { cache: 'no-store' })
+              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=30`, { cache: 'no-store' })
               if (res2.ok) {
                 const j2 = await res2.json()
-                const evs2 = Array.isArray(j2.events) ? j2.events.filter((e:any)=> e?.meta?.type === 'goal') : []
+                const evs2 = Array.isArray(j2.events) ? j2.events : []
                 if (!cancel && evs2.length) setEvents(evs2)
               }
             } catch {}
@@ -1087,32 +1087,48 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
     const t = window.setInterval(load, 60000)
     return () => { cancel = true; window.clearInterval(t) }
   }, [url])
+  const sportEmoji = (s: string) => ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[(s||'').toLowerCase()] || ''
   return (
     <div className="card">
-      <div className="card-header"><h3>Goles (recientes)</h3></div>
+      <div className="card-header"><h3>Eventos (recientes)</h3></div>
       <div className="card-body">
         {!events.length && !loading ? (
-          <div className="muted">No hay goles recientes.</div>
+          <div className="muted">No hay eventos recientes.</div>
         ) : (
           <div className="list">
-          {events.map((e, idx) => {
-          const dt = new Date((e.time||0)*1000).toLocaleString()
-          const lg = e.meta?.league || '—'
-          const home = e.meta?.home?.name || 'Home'
-          const away = e.meta?.away?.name || 'Away'
-          const scHome = e.meta?.score?.home ?? '?'
-          const scAway = e.meta?.score?.away ?? '?'
-          const side = e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')
-          return (
-              <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, opacity:0.85 }}><strong>{lg}</strong></div>
-                  <div style={{ fontSize:14 }}>{home} <strong>{scHome}-{scAway}</strong> {away} {side && <span className="badge" style={{ marginLeft:6 }}>{side}</span>}</div>
+            {events.map((e, idx) => {
+              const dt = new Date((e.time||0)*1000).toLocaleString()
+              const lg = e.meta?.league || '—'
+              const home = e.meta?.home?.name || 'Home'
+              const away = e.meta?.away?.name || 'Away'
+              const scHome = e.meta?.score?.home ?? '?'
+              const scAway = e.meta?.score?.away ?? '?'
+              const sport = String(e.meta?.sport || '')
+              const emoji = e.meta?.emoji || sportEmoji(sport)
+              const type = String(e.meta?.type || '')
+              const dH = Number(e.meta?.delta?.home ?? 0) || 0
+              const dA = Number(e.meta?.delta?.away ?? 0) || 0
+              const pct = typeof e.meta?.deltaPct === 'number' ? e.meta.deltaPct : (Number(e.meta?.deltaPct) || 0)
+              const pctStr = pct ? `${(pct*100).toFixed(3)}%` : ''
+              // label side only for football goal-type
+              const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
+              return (
+                <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
+                  <div style={{ width: 24, textAlign:'center' }}>{emoji}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:12, opacity:0.85 }}><strong>{lg}</strong> <span className="muted small" style={{ marginLeft:6 }}>{sport || ''}</span></div>
+                    <div style={{ fontSize:14, display:'flex', gap:8, alignItems:'baseline' }}>
+                      <div>{home} <strong>{scHome}-{scAway}</strong> {away}</div>
+                      {side && <span className="badge" style={{ marginLeft:6 }}>{side}</span>}
+                      {(dH || dA) ? (
+                        <span className="muted small">ΔH:{dH} ΔA:{dA}{pctStr ? ` (${pctStr})` : ''}</span>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </div>
-          )
-        })}
+              )
+            })}
           </div>
         )}
       </div>

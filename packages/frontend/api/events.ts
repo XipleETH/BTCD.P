@@ -16,7 +16,14 @@ export default async function handler(req: Request): Promise<Response> {
     const arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
     const out = [] as any[]
     for (const raw of arr) {
-      try { out.push(JSON.parse(raw)) } catch {}
+      try {
+        const obj = JSON.parse(raw)
+        // Ensure emoji exists if sport tagged
+        const sport = String(obj?.meta?.sport || '')
+        const em = emojiForSport(sport)
+        if (em && !obj?.meta?.emoji) obj.meta.emoji = em
+        out.push(obj)
+      } catch {}
     }
     if (out.length > 0) {
       return json({ events: out })
@@ -191,4 +198,16 @@ export default async function handler(req: Request): Promise<Response> {
 
 function json(body:any, status=200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+}
+
+function emojiForSport(sport: string): string | undefined {
+  const m: Record<string, string> = {
+    football: '⚽️', soccer: '⚽️',
+    basketball: '🏀',
+    volleyball: '🏐',
+    handball: '🤾',
+    random: '🎲'
+  }
+  const key = sport.toLowerCase()
+  return m[key]
 }

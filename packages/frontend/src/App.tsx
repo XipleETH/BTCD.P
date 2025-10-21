@@ -1056,7 +1056,8 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=30`
+  const limit = 100
+  const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=${limit}`
   useEffect(() => {
     let cancel = false
     const load = async () => {
@@ -1066,16 +1067,31 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
         if (res.ok) {
           const j = await res.json()
           const evs = Array.isArray(j.events) ? j.events : []
-          if (!cancel) setEvents(evs)
+          if (!cancel) {
+            // Merge with existing, de-dup by stable meta.id or a derived key
+            const map = new Map<string, any>()
+            const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
+            for (const e of events) map.set(keyOf(e), e)
+            for (const e of evs) map.set(keyOf(e), e)
+            const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
+            setEvents(merged)
+          }
           // Fallback: if empty, try alternate chain key once
           if (!cancel && (!evs || evs.length === 0)) {
             const alt = chain === 'base-sepolia' ? 'base' : 'base-sepolia'
             try {
-              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=30`, { cache: 'no-store' })
+              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=${limit}`, { cache: 'no-store' })
               if (res2.ok) {
                 const j2 = await res2.json()
                 const evs2 = Array.isArray(j2.events) ? j2.events : []
-                if (!cancel && evs2.length) setEvents(evs2)
+                if (!cancel && evs2.length) {
+                  const map = new Map<string, any>()
+                  const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
+                  for (const e of events) map.set(keyOf(e), e)
+                  for (const e of evs2) map.set(keyOf(e), e)
+                  const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
+                  setEvents(merged)
+                }
               }
             } catch {}
           }

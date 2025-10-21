@@ -37,6 +37,14 @@ export default async function handler(req: Request): Promise<Response> {
         // add sport emoji if not present
         const emoji = emojiForSport(String(meta?.sport || ''))
         if (emoji && !meta.emoji) meta.emoji = emoji
+        // add stable id for dedup and merging in clients
+        if (!meta.id) {
+          const sport = String(meta?.sport || 'na')
+          const fix = String(meta?.fixtureId || meta?.leagueId || 'na')
+          const dH = Number(meta?.delta?.home || 0) || 0
+          const dA = Number(meta?.delta?.away || 0) || 0
+          meta.id = `${sport}:${fix}:${Math.floor(time)}:${dH}:${dA}`
+        }
         const payload = { time: Math.floor(time), value, meta }
         await redis.lpush(eventsKey, JSON.stringify(payload))
         await redis.ltrim(eventsKey, 0, eventsMax - 1)

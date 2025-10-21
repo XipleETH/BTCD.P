@@ -14,7 +14,7 @@ export default async function handler(req: Request): Promise<Response> {
     const mode = String(body?.mode || '').toLowerCase()
     const time = Number(body?.time)
     const value = Number(body?.value)
-    const meta = body?.meta
+  const meta = body?.meta
     if (!Number.isFinite(time) || !Number.isFinite(value)) return resp(400, { error: 'invalid payload' })
 
     const redis = Redis.fromEnv()
@@ -40,6 +40,14 @@ export default async function handler(req: Request): Promise<Response> {
         // Normalize sport emoji if present
         const emoji = emojiForSport(String(meta?.sport || ''))
         if (emoji && !meta.emoji) meta.emoji = emoji
+        // Ensure a stable id to help clients de-duplicate and merge
+        if (!meta.id) {
+          const sport = String(meta?.sport || 'na')
+          const fix = String(meta?.fixtureId || meta?.leagueId || 'na')
+          const dH = Number(meta?.delta?.home || 0) || 0
+          const dA = Number(meta?.delta?.away || 0) || 0
+          meta.id = `${sport}:${fix}:${Math.floor(time)}:${dH}:${dA}`
+        }
         const payload = { time: Math.floor(time), value, meta }
         await redis.lpush(eventsKey, JSON.stringify(payload))
         await redis.ltrim(eventsKey, 0, eventsMax - 1)

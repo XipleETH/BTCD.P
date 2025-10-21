@@ -100,6 +100,48 @@ npm run daemon:localaway -- --network baseSepolia
 ```
 Frontend: ver pestaña Local/Away (#localaway) junto a BTC.D y Random.
 
+### Modo multi-deporte (una sola llamada por verificación)
+
+Para reducir llamadas y ampliar cobertura, existe un agregador de deportes que consolida fútbol, básquet, vóley y handball en una única respuesta:
+
+- Endpoint (Edge): `/api/sports-live` (existe tanto en la raíz como en `packages/frontend/api` para Vercel).
+- Input: `?secret=<API_SECRET opcional>&chain=base-sepolia`
+- Output: `{ ts, chain, items: [...], summary: { football, basketball, volleyball, handball } }`
+- Comportamiento: actualiza snapshots `btcd:last:<sport>:<fixture>` en Redis y devuelve solo los ítems que tienen delta desde la última llamada. No escribe eventos ni ticks (eso lo hace el daemon vía `/api/ingest`).
+
+Configurar el daemon para usar el agregador:
+
+- En Railway: `API_BASE=https://<tu-vercel>.vercel.app/api/sports-live`
+- Opcionales:
+  - `AGGREGATOR_FALLBACK_LEGACY=true` (por defecto) → si no hay deltas por N ciclos, hace un sondeo fútbol “legacy” una vez.
+  - `AGGREGATOR_FALLBACK_EMPTY_CYCLES=3` → N ciclos vacíos antes del fallback.
+  - `PUSH_EVERY_TICK=false` → evita escribir “ticks” sin actividad (menos ruido en eventos).
+
+Persistencia y eventos recientes:
+
+- El endpoint `/api/ingest` ahora sólo guarda en la lista de eventos los sucesos “reales” (no guarda `meta.type = tick`).
+- Límite de retención configurable con `EVENTS_MAX` (por defecto 5000) en Vercel/Railway.
+- El UI (tarjeta “Eventos (recientes)”) fusiona resultados por `meta.id` estable para evitar parpadeos.
+
+Variables de entorno relevantes (Vercel/Railway):
+
+- `API_FOOTBALL_KEY`: clave de API-Sports (se reutiliza para básquet/vóley/handball).
+- `API_SECRET`: secreto opcional para proteger las rutas Edge.
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`: Redis (Upstash).
+- `EVENTS_MAX`: tamaño máximo de la lista de eventos (recomendado 5000+).
+- `INGEST_URL` / `INGEST_SECRET`: para que el daemon sincronice ticks/eventos.
+- `LAST_URL`: (opcional) espejo de `/api/last` para snapshots al reiniciar.
+
+Verificación rápida:
+
+1) Asegúrate de tener partidos en vivo (fútbol u otros). 2) Llama a `/api/sports-live?secret=...` y revisa `summary`. 3) En Railway, los logs del daemon mostrarán, cuando no haya deltas, algo como:
+
+```
+aggregator: no deltas. live summary -> football:12 basket:4 volley:0 hand:2 (emptyCycles=1)
+```
+
+Cuando haya deltas, verás líneas por deporte con `ΔH`, `ΔA` y `netPct` aplicados y el `tx` on-chain.
+
 ## Iniciar frontend
 ```
 cd ../../packages/frontend

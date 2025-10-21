@@ -142,10 +142,11 @@ async function main() {
             if (sport === 'volleyball') lastVolley.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
             if (sport === 'handball') lastHand.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
           }
-          // Optional: if no items for several cycles, run a legacy football poll once to verify activity
+          // Optional: if no items for several cycles, run legacy polls once to verify activity across all sports
           if (fallbackLegacy && emptyCycles >= fallbackEmptyCycles) {
             try {
-              console.log(new Date().toISOString(), `aggregator empty ${emptyCycles} cycles — running legacy football poll once`)
+              console.log(new Date().toISOString(), `aggregator empty ${emptyCycles} cycles — running legacy polls once`)
+              // FOOTBALL legacy
               const fixtures = await fetchLiteFixtures(apiBase.replace('/api/sports-live','/api/football-live-goals'), apiSecret)
               console.log(new Date().toISOString(), `legacy football: fixtures=${fixtures.length}`)
               for (const f of fixtures) {
@@ -194,6 +195,178 @@ async function main() {
                   }
                 }
                 lastFootball.set(id, { home: curHome, away: curAway })
+              }
+              // BASKETBALL legacy (live=all)
+              if (apiKey) {
+                try {
+                  const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                  const url = new URL('https://v1.basketball.api-sports.io/games')
+                  url.searchParams.set('live', 'all')
+                  const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                  const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                  console.log(new Date().toISOString(), `legacy basketball: games=${games.length}`)
+                  for (const g of games) {
+                    const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                    const leagueName = g?.league?.name || g?.country?.name || 'League'
+                    const home = g?.scores?.home || {}
+                    const away = g?.scores?.away || {}
+                    const totHome = Number(home?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(home?.[k] ?? 0) || 0), 0))) || 0
+                    const totAway = Number(away?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(away?.[k] ?? 0) || 0), 0))) || 0
+                    let prev = lastBasket.get(id)
+                    if (!prev && lastApi && ingestSecret) {
+                      try {
+                        const u = new URL(lastApi)
+                        u.searchParams.set('secret', ingestSecret)
+                        u.searchParams.set('sport', 'basketball')
+                        u.searchParams.set('fixture', String(id))
+                        const r = await axios.get(u.toString(), { timeout: 8000 })
+                        if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                          prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                        }
+                      } catch {}
+                    }
+                    prev = prev || { home: totHome, away: totAway }
+                    const dHome = Math.max(0, totHome - prev.home)
+                    const dAway = Math.max(0, totAway - prev.away)
+                    console.log(new Date().toISOString(), `[BASKET][LEGACY] ${leagueName} ΔH:${dHome} ΔA:${dAway}`)
+                    if (dHome || dAway) {
+                      const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                      currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                      const scaled = toScaled(currentIndex)
+                      const tx = await oracle.pushPrice(scaled)
+                      await tx.wait()
+                      console.log(new Date().toISOString(), `[BASKET][LEGACY] netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+                      if (ingestUrl && ingestSecret) {
+                        try {
+                          const time = Math.floor(Date.now()/1000)
+                          const value = currentIndex
+                          const meta = { type:'point', sport:'basketball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                          await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                        } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                      }
+                    }
+                    lastBasket.set(id, { home: totHome, away: totAway })
+                    if (lastApi && ingestSecret) {
+                      try { await axios.post(lastApi, { secret: ingestSecret, sport: 'basketball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+                    }
+                  }
+                } catch (e:any) {
+                  console.warn('legacy basketball fetch failed', e?.message || e)
+                }
+              }
+              // VOLLEYBALL legacy
+              if (apiKey) {
+                try {
+                  const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                  const url = new URL('https://v1.volleyball.api-sports.io/games')
+                  url.searchParams.set('live', 'all')
+                  const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                  const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                  console.log(new Date().toISOString(), `legacy volleyball: games=${games.length}`)
+                  for (const g of games) {
+                    const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                    const leagueName = g?.league?.name || g?.country?.name || 'League'
+                    const periods = g?.scores?.periods || g?.periods || {}
+                    const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
+                    const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
+                    const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+                    let prev = lastVolley.get(id)
+                    if (!prev && lastApi && ingestSecret) {
+                      try {
+                        const u = new URL(lastApi)
+                        u.searchParams.set('secret', ingestSecret)
+                        u.searchParams.set('sport', 'volleyball')
+                        u.searchParams.set('fixture', String(id))
+                        const r = await axios.get(u.toString(), { timeout: 8000 })
+                        if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                          prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                        }
+                      } catch {}
+                    }
+                    prev = prev || { home: totHome, away: totAway }
+                    const dHome = Math.max(0, totHome - prev.home)
+                    const dAway = Math.max(0, totAway - prev.away)
+                    console.log(new Date().toISOString(), `[VOLLEY][LEGACY] ${leagueName} ΔH:${dHome} ΔA:${dAway}`)
+                    if (dHome || dAway) {
+                      const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                      currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                      const scaled = toScaled(currentIndex)
+                      const tx = await oracle.pushPrice(scaled)
+                      await tx.wait()
+                      console.log(new Date().toISOString(), `[VOLLEY][LEGACY] netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+                      if (ingestUrl && ingestSecret) {
+                        try {
+                          const time = Math.floor(Date.now()/1000)
+                          const value = currentIndex
+                          const meta = { type:'point', sport:'volleyball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                          await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                        } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                      }
+                    }
+                    lastVolley.set(id, { home: totHome, away: totAway })
+                    if (lastApi && ingestSecret) {
+                      try { await axios.post(lastApi, { secret: ingestSecret, sport: 'volleyball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+                    }
+                  }
+                } catch (e:any) {
+                  console.warn('legacy volleyball fetch failed', e?.message || e)
+                }
+              }
+              // HANDBALL legacy
+              if (apiKey) {
+                try {
+                  const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                  const url = new URL('https://v1.handball.api-sports.io/games')
+                  url.searchParams.set('live', 'all')
+                  const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                  const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                  console.log(new Date().toISOString(), `legacy handball: games=${games.length}`)
+                  for (const g of games) {
+                    const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                    const leagueName = g?.league?.name || g?.country?.name || 'League'
+                    const totHome = Number(g?.scores?.home ?? 0) || 0
+                    const totAway = Number(g?.scores?.away ?? 0) || 0
+                    let prev = lastHand.get(id)
+                    if (!prev && lastApi && ingestSecret) {
+                      try {
+                        const u = new URL(lastApi)
+                        u.searchParams.set('secret', ingestSecret)
+                        u.searchParams.set('sport', 'handball')
+                        u.searchParams.set('fixture', String(id))
+                        const r = await axios.get(u.toString(), { timeout: 8000 })
+                        if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                          prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                        }
+                      } catch {}
+                    }
+                    prev = prev || { home: totHome, away: totAway }
+                    const dHome = Math.max(0, totHome - prev.home)
+                    const dAway = Math.max(0, totAway - prev.away)
+                    console.log(new Date().toISOString(), `[HANDBALL][LEGACY] ${leagueName} ΔH:${dHome} ΔA:${dAway}`)
+                    if (dHome || dAway) {
+                      const netPct = (dHome * 0.0001) - (dAway * 0.0001)
+                      currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                      const scaled = toScaled(currentIndex)
+                      const tx = await oracle.pushPrice(scaled)
+                      await tx.wait()
+                      console.log(new Date().toISOString(), `[HANDBALL][LEGACY] netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+                      if (ingestUrl && ingestSecret) {
+                        try {
+                          const time = Math.floor(Date.now()/1000)
+                          const value = currentIndex
+                          const meta = { type:'point', sport:'handball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                          await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                        } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                      }
+                    }
+                    lastHand.set(id, { home: totHome, away: totAway })
+                    if (lastApi && ingestSecret) {
+                      try { await axios.post(lastApi, { secret: ingestSecret, sport: 'handball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+                    }
+                  }
+                } catch (e:any) {
+                  console.warn('legacy handball fetch failed', e?.message || e)
+                }
               }
               emptyCycles = 0
             } catch (e:any) {

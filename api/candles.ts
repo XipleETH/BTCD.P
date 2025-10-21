@@ -73,7 +73,7 @@ export default async function handler(req: Request): Promise<Response> {
       : tf === '1d' ? 86400
       : tf === '3d' ? 259200
       : 604800
-    const candles = aggregate(points, bucketSec)
+  const candles = fillGaps(aggregate(points, bucketSec), bucketSec)
     return json({ chain, market, timeframe: tf, updatedAt: new Date().toISOString(), candles })
   } catch (e: any) {
     return json({ error: e?.message || String(e) }, 500)
@@ -98,6 +98,32 @@ function aggregate(points: Array<{time:number; value:number}>, bucketSec: number
     }
   }
   return Array.from(buckets.entries()).sort((a,b)=>a[0]-b[0]).map(([,c])=>c)
+}
+
+// Ensure we have one candle per bucket up to "now" by carrying forward the last close
+function fillGaps(candles: Candle[], bucketSec: number): Candle[] {
+  if (!candles.length) return candles
+  const byTime = new Map<number, Candle>()
+  for (const c of candles) byTime.set(c.time, c)
+  const out: Candle[] = []
+  const start = candles[0].time
+  const nowSec = Math.floor(Date.now() / 1000)
+  const end = Math.floor(nowSec / bucketSec) * bucketSec
+  let t = Math.floor(Number(start) / bucketSec) * bucketSec
+  let lastClose = candles[0].close
+  while (t <= end) {
+    const existing = byTime.get(t as number)
+    if (existing) {
+      out.push(existing)
+      lastClose = existing.close
+    } else {
+      // synth candle with last close
+      const c: Candle = { time: t, open: lastClose, high: lastClose, low: lastClose, close: lastClose }
+      out.push(c)
+    }
+    t += bucketSec
+  }
+  return out
 }
 
 function json(body: any, status = 200): Response {

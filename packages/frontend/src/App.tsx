@@ -93,6 +93,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   // Events banner state (LocalAway only)
   const [bannerEvents, setBannerEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
   const [bannerLoading, setBannerLoading] = useState<boolean>(false)
+  const [bannerHadCache, setBannerHadCache] = useState<boolean>(false)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
@@ -177,21 +178,42 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     return () => { if (t) window.clearTimeout(t) }
   }, [chainKey, tf, market])
 
-  // Load events for banner (LocalAway only)
+  // Load events for banner (LocalAway only) — always show the banner
   useEffect(() => {
-    if (market !== 'localaway') { setBannerEvents([]); return }
+    if (market !== 'localaway') { setBannerEvents([]); setBannerHadCache(false); return }
     let cancel = false
     const limit = 20
     const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
     const url = `${baseUrl}/api/events?chain=${chainParam}&market=localaway&limit=${limit}`
+    const lsKey = `btcd:banner:${chainParam}:localaway`
     const load = async () => {
       try {
         setBannerLoading(true)
+        // Bootstrap from localStorage so the banner shows "last known" events immediately
+        try {
+          const raw = localStorage.getItem(lsKey)
+          if (raw && !cancel) {
+            const arr = JSON.parse(raw)
+            if (Array.isArray(arr) && arr.length) {
+              setBannerEvents(arr)
+              setBannerHadCache(true)
+            }
+          }
+        } catch {}
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
         const j = await res.json()
         const evs = Array.isArray(j?.events) ? j.events : []
-        if (!cancel) setBannerEvents(evs)
+        if (!cancel) {
+          if (evs.length) {
+            setBannerEvents(evs)
+            setBannerHadCache(false)
+            try { localStorage.setItem(lsKey, JSON.stringify(evs)) } catch {}
+          } else {
+            // If API returns empty, keep whatever we had (cache or previous fetch)
+            // If we had no cache and nothing fetched, banner will still render as empty container
+          }
+        }
       } catch {}
       setBannerLoading(false)
     }
@@ -345,8 +367,8 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       </div>
       <div className="card-body p0">
         <div ref={chartWrapRef} style={{ position:'relative' }}>
-          {/* Events banner over the candlestick chart (LocalAway) */}
-          {market==='localaway' && bannerEvents.length > 0 && (
+          {/* Events banner over the candlestick chart (LocalAway) — always visible */}
+          {market==='localaway' && (
             <div style={{ position:'absolute', top:6, left:6, right:6, zIndex:3 }}>
               <div style={{
                 background:'rgba(12,18,33,0.9)',
@@ -357,28 +379,35 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                 whiteSpace:'nowrap',
                 display:'flex',
                 gap:16,
-                alignItems:'center'
+                alignItems:'center',
+                minHeight: 28
               }}>
-                {bannerEvents.slice(0, 8).map((e, idx) => {
-                  const lg = e.meta?.league || ''
-                  const home = e.meta?.home?.name || 'Home'
-                  const away = e.meta?.away?.name || 'Away'
-                  const scHome = e.meta?.score?.home ?? '?'
-                  const scAway = e.meta?.score?.away ?? '?'
-                  const emoji = e.meta?.emoji || ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[String(e.meta?.sport||'').toLowerCase()] || ''
-                  const type = String(e.meta?.type || '')
-                  const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
-                  return (
-                    <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
-                      <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
-                      <div className="muted small" style={{ opacity:0.85, textOverflow:'ellipsis', overflow:'hidden' }}><strong>{lg}</strong></div>
-                      <div style={{ fontSize:13 }}>
-                        {home} <strong>{scHome}-{scAway}</strong> {away}
+                {bannerEvents.length > 0 ? (
+                  bannerEvents.slice(0, 8).map((e, idx) => {
+                    const lg = e.meta?.league || ''
+                    const home = e.meta?.home?.name || 'Home'
+                    const away = e.meta?.away?.name || 'Away'
+                    const scHome = e.meta?.score?.home ?? '?'
+                    const scAway = e.meta?.score?.away ?? '?'
+                    const emoji = e.meta?.emoji || ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[String(e.meta?.sport||'').toLowerCase()] || ''
+                    const type = String(e.meta?.type || '')
+                    const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
+                    return (
+                      <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                        <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
+                        <div className="muted small" style={{ opacity:0.85, textOverflow:'ellipsis', overflow:'hidden' }}><strong>{lg}</strong></div>
+                        <div style={{ fontSize:13 }}>
+                          {home} <strong>{scHome}-{scAway}</strong> {away}
+                        </div>
+                        {side && <span className="badge" style={{ marginLeft:4 }}>{side}</span>}
                       </div>
-                      {side && <span className="badge" style={{ marginLeft:4 }}>{side}</span>}
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                ) : (
+                  <div className="muted small" style={{ opacity:0.8 }}>
+                    {bannerLoading ? 'Cargando eventos…' : (bannerHadCache ? 'Mostrando últimos registrados' : 'Sin eventos recientes')}
+                  </div>
+                )}
               </div>
             </div>
           )}

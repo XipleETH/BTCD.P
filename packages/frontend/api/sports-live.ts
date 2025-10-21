@@ -70,10 +70,12 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch {}
 
-    // BASKETBALL
+    // BASKETBALL (fallback to date-based listing for plans without live=all)
     try {
       const u = new URL('https://v1.basketball.api-sports.io/games')
-      u.searchParams.set('live', 'all')
+      const dateStr = new Date().toISOString().slice(0,10)
+      u.searchParams.set('date', dateStr)
+      u.searchParams.set('timezone', 'UTC')
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()
@@ -97,10 +99,12 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch {}
 
-    // VOLLEYBALL
+    // VOLLEYBALL (date-based)
     try {
       const u = new URL('https://v1.volleyball.api-sports.io/games')
-      u.searchParams.set('live', 'all')
+      const dateStr = new Date().toISOString().slice(0,10)
+      u.searchParams.set('date', dateStr)
+      u.searchParams.set('timezone', 'UTC')
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()
@@ -124,10 +128,12 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch {}
 
-    // HANDBALL
+    // HANDBALL (date-based)
     try {
       const u = new URL('https://v1.handball.api-sports.io/games')
-      u.searchParams.set('live', 'all')
+      const dateStr = new Date().toISOString().slice(0,10)
+      u.searchParams.set('date', dateStr)
+      u.searchParams.set('timezone', 'UTC')
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()

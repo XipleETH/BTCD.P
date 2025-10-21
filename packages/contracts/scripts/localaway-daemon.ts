@@ -196,12 +196,14 @@ async function main() {
                 }
                 lastFootball.set(id, { home: curHome, away: curAway })
               }
-              // BASKETBALL legacy (live=all)
+              // BASKETBALL legacy (date-based)
               if (apiKey) {
                 try {
                   const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                   const url = new URL('https://v1.basketball.api-sports.io/games')
-                  url.searchParams.set('live', 'all')
+                  const dateStr = new Date().toISOString().slice(0,10)
+                  url.searchParams.set('date', dateStr)
+                  url.searchParams.set('timezone', 'UTC')
                   const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
                   const games = Array.isArray(resp.data?.response) ? resp.data.response : []
                   console.log(new Date().toISOString(), `legacy basketball: games=${games.length}`)
@@ -254,12 +256,14 @@ async function main() {
                   console.warn('legacy basketball fetch failed', e?.message || e)
                 }
               }
-              // VOLLEYBALL legacy
+              // VOLLEYBALL legacy (date-based)
               if (apiKey) {
                 try {
                   const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                   const url = new URL('https://v1.volleyball.api-sports.io/games')
-                  url.searchParams.set('live', 'all')
+                  const dateStr = new Date().toISOString().slice(0,10)
+                  url.searchParams.set('date', dateStr)
+                  url.searchParams.set('timezone', 'UTC')
                   const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
                   const games = Array.isArray(resp.data?.response) ? resp.data.response : []
                   console.log(new Date().toISOString(), `legacy volleyball: games=${games.length}`)
@@ -312,12 +316,14 @@ async function main() {
                   console.warn('legacy volleyball fetch failed', e?.message || e)
                 }
               }
-              // HANDBALL legacy
+              // HANDBALL legacy (date-based)
               if (apiKey) {
                 try {
                   const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                   const url = new URL('https://v1.handball.api-sports.io/games')
-                  url.searchParams.set('live', 'all')
+                  const dateStr = new Date().toISOString().slice(0,10)
+                  url.searchParams.set('date', dateStr)
+                  url.searchParams.set('timezone', 'UTC')
                   const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
                   const games = Array.isArray(resp.data?.response) ? resp.data.response : []
                   console.log(new Date().toISOString(), `legacy handball: games=${games.length}`)

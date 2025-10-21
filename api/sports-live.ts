@@ -19,7 +19,8 @@ export default async function handler(req: Request): Promise<Response> {
     const headers: Record<string,string> = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
     const redis = Redis.fromEnv()
 
-    const items: any[] = []
+  const items: any[] = []
+  const summary = { football: 0, basketball: 0, volleyball: 0, handball: 0 }
     const nowSec = Math.floor(Date.now()/1000)
 
     // helpers for last snapshot
@@ -40,8 +41,9 @@ export default async function handler(req: Request): Promise<Response> {
       const res = await fetch(u.toString(), { cache: 'no-store' })
       if (res.ok) {
         const j: any = await res.json()
-        const fixtures = Array.isArray(j?.fixtures) ? j.fixtures : []
-        for (const f of fixtures) {
+  const fixtures = Array.isArray(j?.fixtures) ? j.fixtures : []
+  summary.football = fixtures.length
+  for (const f of fixtures) {
           const id = Number(f?.id); if (!id) continue
           const curHome = Number(f?.home?.goals ?? 0) || 0
           const curAway = Number(f?.away?.goals ?? 0) || 0
@@ -75,7 +77,8 @@ export default async function handler(req: Request): Promise<Response> {
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()
-        const games = Array.isArray(j?.response) ? j.response : []
+  const games = Array.isArray(j?.response) ? j.response : []
+  summary.basketball = games.length
         for (const g of games) {
           const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
           const home = g?.scores?.home || {}
@@ -101,7 +104,8 @@ export default async function handler(req: Request): Promise<Response> {
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()
-        const games = Array.isArray(j?.response) ? j.response : []
+  const games = Array.isArray(j?.response) ? j.response : []
+  summary.volleyball = games.length
         for (const g of games) {
           const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
           const periods = g?.scores?.periods || g?.periods || {}
@@ -127,7 +131,8 @@ export default async function handler(req: Request): Promise<Response> {
       const r = await fetch(u.toString(), { headers, cache: 'no-store' })
       if (r.ok) {
         const j:any = await r.json()
-        const games = Array.isArray(j?.response) ? j.response : []
+  const games = Array.isArray(j?.response) ? j.response : []
+  summary.handball = games.length
         for (const g of games) {
           const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
           const totHome = Number(g?.scores?.home ?? 0) || 0
@@ -144,7 +149,7 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch {}
 
-    return json({ ts: nowSec, chain, items })
+  return json({ ts: nowSec, chain, items, summary })
   } catch (e:any) {
     return json({ error: e?.message || String(e) }, 500)
   }

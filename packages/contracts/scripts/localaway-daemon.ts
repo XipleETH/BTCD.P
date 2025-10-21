@@ -64,6 +64,10 @@ async function main() {
   const maxInterval = Number(process.env.MAX_INTERVAL_MS || '300000')
   const alwaysPollEveryMinute = String(process.env.ALWAYS_POLL_EVERY_MINUTE || 'true').toLowerCase() === 'true'
   const pushEveryTick = String(process.env.PUSH_EVERY_TICK || 'true').toLowerCase() === 'true'
+  // Optional fallback to legacy football processing when aggregator returns empty for several cycles
+  const fallbackLegacy = String(process.env.AGGREGATOR_FALLBACK_LEGACY || 'true').toLowerCase() === 'true'
+  const fallbackEmptyCycles = Math.max(1, Number(process.env.AGGREGATOR_FALLBACK_EMPTY_CYCLES || '3'))
+  let emptyCycles = 0
   let currentInterval = baseInterval
 
   // Optional DB ingest for shared chart
@@ -103,6 +107,13 @@ async function main() {
           u.searchParams.set('chain', chain)
           const resp = await axios.get(u.toString(), { timeout: 20000 })
           const items = Array.isArray(resp.data?.items) ? resp.data.items : []
+          const summary = resp.data?.summary || { football: 0, basketball: 0, volleyball: 0, handball: 0 }
+          if (!items.length) {
+            emptyCycles++
+            console.log(new Date().toISOString(), `aggregator: no deltas. live summary -> football:${summary.football} basket:${summary.basketball} volley:${summary.volleyball} hand:${summary.handball} (emptyCycles=${emptyCycles})`)
+          } else {
+            emptyCycles = 0
+          }
           for (const it of items) {
             const sport = String(it?.sport || '')
             const id = Number(it?.fixtureId || 0); if (!id) continue
@@ -130,6 +141,64 @@ async function main() {
             if (sport === 'basketball') lastBasket.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
             if (sport === 'volleyball') lastVolley.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
             if (sport === 'handball') lastHand.set(id, { home: it?.score?.home||0, away: it?.score?.away||0 })
+          }
+          // Optional: if no items for several cycles, run a legacy football poll once to verify activity
+          if (fallbackLegacy && emptyCycles >= fallbackEmptyCycles) {
+            try {
+              console.log(new Date().toISOString(), `aggregator empty ${emptyCycles} cycles — running legacy football poll once`)
+              const fixtures = await fetchLiteFixtures(apiBase.replace('/api/sports-live','/api/football-live-goals'), apiSecret)
+              console.log(new Date().toISOString(), `legacy football: fixtures=${fixtures.length}`)
+              for (const f of fixtures) {
+                const id = Number(f?.id); if (!id) continue
+                const curHome = Number(f?.home?.goals ?? 0) || 0
+                const curAway = Number(f?.away?.goals ?? 0) || 0
+                let prev = lastFootball.get(id)
+                if (!prev && lastApi && ingestSecret) {
+                  try {
+                    const u = new URL(lastApi)
+                    u.searchParams.set('secret', ingestSecret)
+                    u.searchParams.set('sport', 'football')
+                    u.searchParams.set('fixture', String(id))
+                    const r = await axios.get(u.toString(), { timeout: 8000 })
+                    if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                      prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                    }
+                  } catch {}
+                }
+                prev = prev || { home: curHome, away: curAway }
+                const dHome = Math.max(0, curHome - prev.home)
+                const dAway = Math.max(0, curAway - prev.away)
+                console.log(new Date().toISOString(), `[FOOTBALL][LEGACY] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway}`)
+                if (dHome || dAway) {
+                  const netPct = (dHome * 0.001) - (dAway * 0.001)
+                  currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const scaled = toScaled(currentIndex)
+                  const tx = await oracle.pushPrice(scaled)
+                  await tx.wait()
+                  console.log(new Date().toISOString(), `[FOOTBALL][LEGACY] netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+                  if (ingestUrl && ingestSecret) {
+                    try {
+                      const time = Math.floor(Date.now() / 1000)
+                      const value = currentIndex
+                      const meta = {
+                        type: 'point', sport: 'football', fixtureId: id,
+                        league: f?.league?.name, leagueId: (f as any)?.league?.id,
+                        home: { id: f?.home?.id, name: f?.home?.name },
+                        away: { id: f?.away?.id, name: f?.away?.name },
+                        score: { home: curHome, away: curAway },
+                        delta: { home: dHome, away: dAway },
+                        deltaPct: netPct
+                      }
+                      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                    } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                  }
+                }
+                lastFootball.set(id, { home: curHome, away: curAway })
+              }
+              emptyCycles = 0
+            } catch (e:any) {
+              console.warn('legacy fallback failed', e?.message || e)
+            }
           }
         } catch (e:any) {
           console.warn('aggregator fetch failed', e?.message || e)

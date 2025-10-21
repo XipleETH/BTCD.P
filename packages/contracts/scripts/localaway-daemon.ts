@@ -22,6 +22,11 @@ function toScaled(n: number): bigint {
   return BigInt(Math.round(n * 1e8))
 }
 
+async function simulateCall(to: string, data: string): Promise<void> {
+  // Low-level static call to detect reverts before sending a tx
+  await ethers.provider.call({ to, data })
+}
+
 type LiteFixture = {
   id: number
   league?: { id?: number, name?: string }
@@ -57,7 +62,12 @@ async function main() {
     signer = new (ethers as any).Wallet(pk, ethers.provider)
   }
   const oracle = await ethers.getContractAt('LocalAwayOracle', oracleAddr, signer as any)
-  console.log('LocalAway daemon on', network.name, 'oracle', oracleAddr, 'as', await (signer as any).getAddress())
+  const signerAddr = await (signer as any).getAddress()
+  console.log('LocalAway daemon on', network.name, 'oracle', oracleAddr, 'as', signerAddr)
+  try {
+    const ok = await (oracle as any).isUpdater(signerAddr)
+    console.log('isUpdater?', ok)
+  } catch {}
 
   // 1-minute cadence by default (base), with optional dynamic backoff up to MAX_INTERVAL_MS
   const baseInterval = Number(process.env.INTERVAL_MS || '60000')
@@ -125,6 +135,14 @@ async function main() {
             anyActivity = true
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
             const scaled = toScaled(currentIndex)
+            // preflight simulate to catch reverts (e.g., permissions)
+            try {
+              const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+              await simulateCall(oracleAddr, data)
+            } catch (e:any) {
+              console.warn('preflight push failed (skipping send)', e?.message || e)
+              continue
+            }
             const tx = await oracle.pushPrice(scaled)
             await tx.wait()
             console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
@@ -174,6 +192,13 @@ async function main() {
                   const netPct = (dHome * 0.001) - (dAway * 0.001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
                   const scaled = toScaled(currentIndex)
+                  try {
+                    const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+                    await simulateCall(oracleAddr, data)
+                  } catch (e:any) {
+                    console.warn('preflight push failed (legacy football) — skipping send', e?.message || e)
+                    continue
+                  }
                   const tx = await oracle.pushPrice(scaled)
                   await tx.wait()
                   console.log(new Date().toISOString(), `[FOOTBALL][LEGACY] netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
@@ -235,6 +260,13 @@ async function main() {
                       const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                       currentIndex = Math.max(1, currentIndex * (1 + netPct))
                       const scaled = toScaled(currentIndex)
+                      try {
+                        const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+                        await simulateCall(oracleAddr, data)
+                      } catch (e:any) {
+                        console.warn('preflight push failed (legacy basketball) — skipping send', e?.message || e)
+                        continue
+                      }
                       const tx = await oracle.pushPrice(scaled)
                       await tx.wait()
                       console.log(new Date().toISOString(), `[BASKET][LEGACY] netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
@@ -295,6 +327,13 @@ async function main() {
                       const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                       currentIndex = Math.max(1, currentIndex * (1 + netPct))
                       const scaled = toScaled(currentIndex)
+                      try {
+                        const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+                        await simulateCall(oracleAddr, data)
+                      } catch (e:any) {
+                        console.warn('preflight push failed (legacy volleyball) — skipping send', e?.message || e)
+                        continue
+                      }
                       const tx = await oracle.pushPrice(scaled)
                       await tx.wait()
                       console.log(new Date().toISOString(), `[VOLLEY][LEGACY] netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
@@ -353,6 +392,13 @@ async function main() {
                       const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                       currentIndex = Math.max(1, currentIndex * (1 + netPct))
                       const scaled = toScaled(currentIndex)
+                      try {
+                        const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+                        await simulateCall(oracleAddr, data)
+                      } catch (e:any) {
+                        console.warn('preflight push failed (legacy handball) — skipping send', e?.message || e)
+                        continue
+                      }
                       const tx = await oracle.pushPrice(scaled)
                       await tx.wait()
                       console.log(new Date().toISOString(), `[HANDBALL][LEGACY] netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
@@ -412,6 +458,15 @@ async function main() {
           const netPct = (dHome * 0.001) - (dAway * 0.001) // 0.1% per goal
           currentIndex = Math.max(1, currentIndex * (1 + netPct))
           const scaled = toScaled(currentIndex)
+          try {
+            const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+            await simulateCall(oracleAddr, data)
+          } catch (e:any) {
+            console.warn('preflight push failed (tick) — skipping send', e?.message || e)
+            // Skip pushing to avoid revert storms
+            await sleep(1000)
+            continue
+          }
           const tx = await oracle.pushPrice(scaled)
           await tx.wait()
           console.log(new Date().toISOString(), `[FOOTBALL] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)

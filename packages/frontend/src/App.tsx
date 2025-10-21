@@ -90,6 +90,9 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   const [remaining, setRemaining] = useState<number>(0)
   const [overlayTop, setOverlayTop] = useState<number>(8)
   const [livePrice, setLivePrice] = useState<number | null>(null)
+  // Events banner state (LocalAway only)
+  const [bannerEvents, setBannerEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
+  const [bannerLoading, setBannerLoading] = useState<boolean>(false)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
@@ -103,6 +106,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
 
   // Build history from on-chain events and then poll live values
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
+  const chainParam = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
 
   // Fetch pre-aggregated candle JSON; bootstrap from localStorage
   useEffect(() => {
@@ -172,6 +176,29 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     t = window.setTimeout(tick, 60000)
     return () => { if (t) window.clearTimeout(t) }
   }, [chainKey, tf, market])
+
+  // Load events for banner (LocalAway only)
+  useEffect(() => {
+    if (market !== 'localaway') { setBannerEvents([]); return }
+    let cancel = false
+    const limit = 20
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+    const url = `${baseUrl}/api/events?chain=${chainParam}&market=localaway&limit=${limit}`
+    const load = async () => {
+      try {
+        setBannerLoading(true)
+        const res = await fetch(url, { cache: 'no-store' })
+        if (!res.ok) return
+        const j = await res.json()
+        const evs = Array.isArray(j?.events) ? j.events : []
+        if (!cancel) setBannerEvents(evs)
+      } catch {}
+      setBannerLoading(false)
+    }
+    load()
+    const t = window.setInterval(load, 60000)
+    return () => { cancel = true; window.clearInterval(t) }
+  }, [market, chainParam])
 
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
@@ -318,6 +345,43 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       </div>
       <div className="card-body p0">
         <div ref={chartWrapRef} style={{ position:'relative' }}>
+          {/* Events banner over the candlestick chart (LocalAway) */}
+          {market==='localaway' && bannerEvents.length > 0 && (
+            <div style={{ position:'absolute', top:6, left:6, right:6, zIndex:3 }}>
+              <div style={{
+                background:'rgba(12,18,33,0.9)',
+                border:'1px solid rgba(255,255,255,0.12)',
+                borderRadius:6,
+                padding:'6px 10px',
+                overflow:'hidden',
+                whiteSpace:'nowrap',
+                display:'flex',
+                gap:16,
+                alignItems:'center'
+              }}>
+                {bannerEvents.slice(0, 8).map((e, idx) => {
+                  const lg = e.meta?.league || ''
+                  const home = e.meta?.home?.name || 'Home'
+                  const away = e.meta?.away?.name || 'Away'
+                  const scHome = e.meta?.score?.home ?? '?'
+                  const scAway = e.meta?.score?.away ?? '?'
+                  const emoji = e.meta?.emoji || ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[String(e.meta?.sport||'').toLowerCase()] || ''
+                  const type = String(e.meta?.type || '')
+                  const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
+                  return (
+                    <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                      <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
+                      <div className="muted small" style={{ opacity:0.85, textOverflow:'ellipsis', overflow:'hidden' }}><strong>{lg}</strong></div>
+                      <div style={{ fontSize:13 }}>
+                        {home} <strong>{scHome}-{scAway}</strong> {away}
+                      </div>
+                      {side && <span className="badge" style={{ marginLeft:4 }}>{side}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <div id={containerId} className="chart" />
           <div style={{ position:'absolute', top: overlayTop, right: 6, background:'#fff', color:'#111', border:'1px solid #d1d5db', boxShadow:'0 1px 3px rgba(0,0,0,0.25)', padding:'4px 8px', borderRadius:4, fontSize:12, lineHeight:1.15, fontWeight:600, minWidth:64, textAlign:'right' }}>
             <div>
@@ -407,9 +471,6 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
           </div>
           <div className="col">
             <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
-            {market === 'localaway' && (
-              <GoalsCard chainKey={chain} />
-            )}
             {market === 'random' && (
               <RandomCard chainKey={chain} oracleAddress={oracleAddress} />
             )}

@@ -13,6 +13,7 @@ export default async function handler(req: Request): Promise<Response> {
   const oracle = (searchParams.get('oracle') || '').trim()
     const redis = Redis.fromEnv()
     const eventsKey = `btcd:events:${chain}:${market}`
+  const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
     const arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
     const out = [] as any[]
     for (const raw of arr) {
@@ -54,7 +55,7 @@ export default async function handler(req: Request): Promise<Response> {
             for (let i = recent.length - 1; i >= 0; i--) {
               await redis.lpush(eventsKey, JSON.stringify(recent[i]))
             }
-            await redis.ltrim(eventsKey, 0, 499)
+            await redis.ltrim(eventsKey, 0, eventsMax - 1)
           } catch {}
           return json({ events: recent })
         }
@@ -119,7 +120,7 @@ export default async function handler(req: Request): Promise<Response> {
                 for (let i = limited.length - 1; i >= 0; i--) {
                   await redis.lpush(eventsKey, JSON.stringify(limited[i]))
                 }
-                await redis.ltrim(eventsKey, 0, 499)
+                await redis.ltrim(eventsKey, 0, eventsMax - 1)
               } catch {}
               return json({ events: limited })
             }
@@ -183,7 +184,7 @@ export default async function handler(req: Request): Promise<Response> {
               const ev = recent[i]
               await redis.lpush(eventsKey, JSON.stringify(ev))
             }
-            await redis.ltrim(eventsKey, 0, Math.max(0, 500 - 1))
+            await redis.ltrim(eventsKey, 0, eventsMax - 1)
           } catch {}
         }
         return json({ events: recent })

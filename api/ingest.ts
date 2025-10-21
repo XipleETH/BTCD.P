@@ -18,8 +18,9 @@ export default async function handler(req: Request): Promise<Response> {
     if (!Number.isFinite(time) || !Number.isFinite(value)) return resp(400, { error: 'invalid payload' })
 
     const redis = Redis.fromEnv()
-    const ticksKey = `btcd:ticks:${chain}:${market}`
-    const eventsKey = `btcd:events:${chain}:${market}`
+  const ticksKey = `btcd:ticks:${chain}:${market}`
+  const eventsKey = `btcd:events:${chain}:${market}`
+  const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
 
     // Optional delete mode to clear a series quickly
     if (mode === 'del') {
@@ -31,19 +32,17 @@ export default async function handler(req: Request): Promise<Response> {
     // Store time/value for candles as ZSET score=time, member=value (as string)
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
 
-    // Optionally store metadata in a capped list (last 500 events)
-    if (meta && typeof meta === 'object') {
+    // Optionally store metadata in a capped list
+    // Only persist non-tick events so the feed accumulates meaningful updates
+    const metaType = String(meta?.type || '').toLowerCase()
+    if (meta && typeof meta === 'object' && metaType !== 'tick') {
       try {
         // Normalize sport emoji if present
         const emoji = emojiForSport(String(meta?.sport || ''))
         if (emoji && !meta.emoji) meta.emoji = emoji
-        // For neutral ticks, store 0 so front can treat as no-delta while keeping continuity in ticks
-        const valueForEvent = (String(meta?.type).toLowerCase() === 'tick' && String(meta?.note).toLowerCase() === 'no-activity')
-          ? 0
-          : value
-        const payload = { time: Math.floor(time), value: valueForEvent, meta }
+        const payload = { time: Math.floor(time), value, meta }
         await redis.lpush(eventsKey, JSON.stringify(payload))
-        await redis.ltrim(eventsKey, 0, 499)
+        await redis.ltrim(eventsKey, 0, eventsMax - 1)
       } catch {}
     }
 

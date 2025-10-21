@@ -21,6 +21,7 @@ export default async function handler(req: Request): Promise<Response> {
     // Per-market keying so datasets don't mix
   const ticksKey = `btcd:ticks:${chain}:${market}`
   const eventsKey = `btcd:events:${chain}:${market}`
+  const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
       // Optional delete mode to clear a series quickly
       if (mode === 'del') {
         await redis.del(ticksKey)
@@ -29,20 +30,16 @@ export default async function handler(req: Request): Promise<Response> {
       }
     // Store as ZSET score=time, member=value (as string) — this powers candles
     await redis.zadd(ticksKey, { score: Math.floor(time), member: String(value) })
-    // Optionally store metadata in a capped list (last 500 events)
-    if (meta && typeof meta === 'object') {
+    // Optionally store metadata in a capped list (skip neutral ticks)
+    const metaType = String(meta?.type || '').toLowerCase()
+    if (meta && typeof meta === 'object' && metaType !== 'tick') {
       try {
         // add sport emoji if not present
         const emoji = emojiForSport(String(meta?.sport || ''))
         if (emoji && !meta.emoji) meta.emoji = emoji
-        // For "no-goal" ticks, persist value=0 in events to represent a neutral delta,
-        // while keeping the absolute index in the ticks ZSET above for chart continuity.
-        const valueForEvent = (String(meta?.type).toLowerCase() === 'tick' && ['no-goal','no-activity'].includes(String(meta?.note).toLowerCase()))
-          ? 0
-          : value
-        const payload = { time: Math.floor(time), value: valueForEvent, meta }
+        const payload = { time: Math.floor(time), value, meta }
         await redis.lpush(eventsKey, JSON.stringify(payload))
-        await redis.ltrim(eventsKey, 0, 499)
+        await redis.ltrim(eventsKey, 0, eventsMax - 1)
       } catch {}
     }
     // Trim to last 10000

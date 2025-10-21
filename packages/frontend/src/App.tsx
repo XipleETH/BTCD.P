@@ -94,6 +94,10 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
   const [bannerEvents, setBannerEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
   const [bannerLoading, setBannerLoading] = useState<boolean>(false)
   const [bannerHadCache, setBannerHadCache] = useState<boolean>(false)
+  // Random banner state (Random only)
+  const [randBanner, setRandBanner] = useState<Array<{ time:number, value:number }>>([])
+  const [randLoading, setRandLoading] = useState<boolean>(false)
+  const [randHadCache, setRandHadCache] = useState<boolean>(false)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
@@ -221,6 +225,54 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     const t = window.setInterval(load, 60000)
     return () => { cancel = true; window.clearInterval(t) }
   }, [market, chainParam])
+
+  // Load recent random numbers for banner (Random only) — always show the banner
+  useEffect(() => {
+    if (market !== 'random') { setRandBanner([]); setRandHadCache(false); return }
+    let cancel = false
+    const limit = 20
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+    const url = `${baseUrl}/api/events?chain=${chainParam}&market=random&limit=${limit}&oracle=${encodeURIComponent(oracleAddress||'')}`
+    const lsKey = `btcd:banner:${chainParam}:random`
+    const load = async () => {
+      try {
+        setRandLoading(true)
+        // Bootstrap from localStorage
+        try {
+          const raw = localStorage.getItem(lsKey)
+          if (raw && !cancel) {
+            const arr = JSON.parse(raw)
+            if (Array.isArray(arr) && arr.length) {
+              setRandBanner(arr)
+              setRandHadCache(true)
+            }
+          }
+        } catch {}
+        const res = await fetch(url, { cache: 'no-store' })
+        if (res.ok) {
+          const j = await res.json()
+          const evs = Array.isArray(j?.events) ? j.events : []
+          // Normalize to {time,value} newest-first
+          const rows = evs.map((e:any)=> ({ time: Number(e?.time)||0, value: Number(e?.value) }))
+            .filter((r: { time:number, value:number })=> Number.isFinite(r.time) && Number.isFinite(r.value))
+            .sort((a: { time:number }, b: { time:number })=> b.time - a.time)
+          if (!cancel) {
+            if (rows.length) {
+              setRandBanner(rows)
+              setRandHadCache(false)
+              try { localStorage.setItem(lsKey, JSON.stringify(rows)) } catch {}
+            } else {
+              // Keep cache if API empty; optional: fallback to on-chain scan (heavy)
+            }
+          }
+        }
+      } catch {}
+      setRandLoading(false)
+    }
+    load()
+    const t = window.setInterval(load, 60000)
+    return () => { cancel = true; window.clearInterval(t) }
+  }, [market, chainParam, oracleAddress])
 
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
@@ -406,6 +458,50 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                 ) : (
                   <div className="muted small" style={{ opacity:0.8 }}>
                     {bannerLoading ? 'Cargando eventos…' : (bannerHadCache ? 'Mostrando últimos registrados' : 'Sin eventos recientes')}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Numbers banner over the candlestick chart (Random) — always visible */}
+          {market==='random' && (
+            <div style={{ position:'absolute', top:6, left:6, right:6, zIndex:3 }}>
+              <div style={{
+                background:'rgba(12,18,33,0.9)',
+                border:'1px solid rgba(255,255,255,0.12)',
+                borderRadius:6,
+                padding:'6px 10px',
+                overflow:'hidden',
+                whiteSpace:'nowrap',
+                display:'flex',
+                gap:16,
+                alignItems:'center',
+                minHeight: 28
+              }}>
+                {randBanner.length > 0 ? (
+                  randBanner.slice(0, 8).map((r, idx) => {
+                    const prev = randBanner[idx+1]?.value
+                    const stepBps = (typeof prev === 'number' && prev > 0)
+                      ? Math.round(((r.value - prev) / prev) * 10000)
+                      : null
+                    const sign = stepBps !== null ? (stepBps > 0 ? `+${stepBps}` : `${stepBps}`) : '—'
+                    const rounded = Math.round(r.value)
+                    return (
+                      <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                        <div style={{ width:20, textAlign:'center' }}>🎲</div>
+                        <div style={{ fontSize:13, display:'flex', alignItems:'baseline', gap:8 }}>
+                          <strong>{r.value.toFixed(4)}</strong>
+                          <span className={stepBps !== null ? (stepBps >= 0 ? 'pnl up small' : 'pnl down small') : 'muted small'}>
+                            ({sign} bps)
+                          </span>
+                          <span className="muted small">≈ {rounded}</span>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="muted small" style={{ opacity:0.8 }}>
+                    {randLoading ? 'Cargando números…' : (randHadCache ? 'Mostrando últimos registrados' : 'Sin números recientes')}
                   </div>
                 )}
               </div>

@@ -71,6 +71,8 @@ async function main() {
   const ingestSecret = (process.env.INGEST_SECRET || '').trim()
   const chain = (process.env.CHAIN || (network.name === 'baseSepolia' ? 'base-sepolia' : (network.name === 'base' ? 'base' : network.name))).toLowerCase()
   const market = (process.env.MARKET || 'localaway').toLowerCase()
+  // Optional shared snapshot API (root /api/last guarded by INGEST_SECRET)
+  const lastApi = (process.env.LAST_URL || (ingestUrl ? ingestUrl.replace('/ingest', '/last') : '')).trim()
 
   // Track last known scores per fixture to detect deltas (per sport)
   const lastFootball = new Map<number, { home:number, away:number, homeName?:string, awayName?:string, leagueName?:string }>()
@@ -97,7 +99,21 @@ async function main() {
         const id = Number(f?.id); if (!id) continue
         const curHome = Number(f?.home?.goals ?? 0) || 0
         const curAway = Number(f?.away?.goals ?? 0) || 0
-        const prev = lastFootball.get(id) || { home: curHome, away: curAway }
+        // try remote last if memory empty
+        let prev = lastFootball.get(id)
+        if (!prev && lastApi && ingestSecret) {
+          try {
+            const u = new URL(lastApi)
+            u.searchParams.set('secret', ingestSecret)
+            u.searchParams.set('sport', 'football')
+            u.searchParams.set('fixture', String(id))
+            const r = await axios.get(u.toString(), { timeout: 8000 })
+            if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+              prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+            }
+          } catch {}
+        }
+        prev = prev || { home: curHome, away: curAway }
         const dHome = Math.max(0, curHome - prev.home)
         const dAway = Math.max(0, curAway - prev.away)
         if (dHome === 0 && dAway === 0) continue
@@ -126,6 +142,12 @@ async function main() {
           } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
         }
         lastFootball.set(id, { home: curHome, away: curAway, homeName: f?.home?.name, awayName: f?.away?.name, leagueName: f?.league?.name })
+        // persist last snapshot for cross-restarts
+        if (lastApi && ingestSecret) {
+          try {
+            await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 })
+          } catch {}
+        }
       }
 
       // SCHEDULED SPORTS every 15 minutes
@@ -151,7 +173,21 @@ async function main() {
             // prefer total if present, else sum quarters
             const totHome = Number(home?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(home?.[k] ?? 0) || 0), 0))) || 0
             const totAway = Number(away?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(away?.[k] ?? 0) || 0), 0))) || 0
-            const prev = lastBasket.get(id) || { home: totHome, away: totAway }
+            // read remote prev if necessary
+            let prev = lastBasket.get(id)
+            if (!prev && lastApi && ingestSecret) {
+              try {
+                const u = new URL(lastApi)
+                u.searchParams.set('secret', ingestSecret)
+                u.searchParams.set('sport', 'basketball')
+                u.searchParams.set('fixture', String(id))
+                const r = await axios.get(u.toString(), { timeout: 8000 })
+                if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                  prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                }
+              } catch {}
+            }
+            prev = prev || { home: totHome, away: totAway }
             const dHome = Math.max(0, totHome - prev.home)
             const dAway = Math.max(0, totAway - prev.away)
             if (dHome === 0 && dAway === 0) { lastBasket.set(id, { home: totHome, away: totAway }); continue }
@@ -170,6 +206,9 @@ async function main() {
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
             lastBasket.set(id, { home: totHome, away: totAway })
+            if (lastApi && ingestSecret) {
+              try { await axios.post(lastApi, { secret: ingestSecret, sport: 'basketball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+            }
           }
         } catch (e:any) { console.warn('basketball fetch failed', e?.message || e) }
       }
@@ -188,7 +227,20 @@ async function main() {
             const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
             const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
             const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
-            const prev = lastVolley.get(id) || { home: totHome, away: totAway }
+            let prev = lastVolley.get(id)
+            if (!prev && lastApi && ingestSecret) {
+              try {
+                const u = new URL(lastApi)
+                u.searchParams.set('secret', ingestSecret)
+                u.searchParams.set('sport', 'volleyball')
+                u.searchParams.set('fixture', String(id))
+                const r = await axios.get(u.toString(), { timeout: 8000 })
+                if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                  prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                }
+              } catch {}
+            }
+            prev = prev || { home: totHome, away: totAway }
             const dHome = Math.max(0, totHome - prev.home)
             const dAway = Math.max(0, totAway - prev.away)
             if (dHome === 0 && dAway === 0) { lastVolley.set(id, { home: totHome, away: totAway }); continue }
@@ -207,6 +259,9 @@ async function main() {
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
             lastVolley.set(id, { home: totHome, away: totAway })
+            if (lastApi && ingestSecret) {
+              try { await axios.post(lastApi, { secret: ingestSecret, sport: 'volleyball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+            }
           }
         } catch (e:any) { console.warn('volleyball fetch failed', e?.message || e) }
       }
@@ -223,7 +278,20 @@ async function main() {
             const leagueName = g?.league?.name || g?.country?.name || 'League'
             const totHome = Number(g?.scores?.home ?? 0) || 0
             const totAway = Number(g?.scores?.away ?? 0) || 0
-            const prev = lastHand.get(id) || { home: totHome, away: totAway }
+            let prev = lastHand.get(id)
+            if (!prev && lastApi && ingestSecret) {
+              try {
+                const u = new URL(lastApi)
+                u.searchParams.set('secret', ingestSecret)
+                u.searchParams.set('sport', 'handball')
+                u.searchParams.set('fixture', String(id))
+                const r = await axios.get(u.toString(), { timeout: 8000 })
+                if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                  prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                }
+              } catch {}
+            }
+            prev = prev || { home: totHome, away: totAway }
             const dHome = Math.max(0, totHome - prev.home)
             const dAway = Math.max(0, totAway - prev.away)
             if (dHome === 0 && dAway === 0) { lastHand.set(id, { home: totHome, away: totAway }); continue }
@@ -242,6 +310,9 @@ async function main() {
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
             lastHand.set(id, { home: totHome, away: totAway })
+            if (lastApi && ingestSecret) {
+              try { await axios.post(lastApi, { secret: ingestSecret, sport: 'handball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {}
+            }
           }
         } catch (e:any) { console.warn('handball fetch failed', e?.message || e) }
       }

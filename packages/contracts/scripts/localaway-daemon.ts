@@ -130,6 +130,16 @@ async function main() {
 
   // slot scheduler state
   let lastSlot = -1
+  // per-sport cooldown to guarantee max 1 call per 15 minutes even if loop conditions misfire
+  const FIFTEEN_SEC = 900
+  const nextAllowed: Record<'football'|'handball'|'volleyball'|'basketball', number> = {
+    football: 0,
+    handball: 0,
+    volleyball: 0,
+    basketball: 0,
+  }
+  const canRun = (sport: keyof typeof nextAllowed, nowSec: number) => nowSec >= (nextAllowed[sport] || 0)
+  const markRun = (sport: keyof typeof nextAllowed, nowSec: number) => { nextAllowed[sport] = nowSec + FIFTEEN_SEC }
 
   while (true) {
     try {
@@ -147,6 +157,9 @@ async function main() {
             if (slot === 0) {
               // FOOTBALL (internal endpoint)
               try {
+                if (!canRun('football', nowSec)) { console.log(new Date().toISOString(), '[STAGGER] football cooldown active — skip'); }
+                else {
+                  markRun('football', nowSec)
                 const fixtures = await fetchLiteFixtures(footballUrl, apiSecret)
                 for (const f of fixtures) {
                   const id = Number(f?.id); if (!id) continue
@@ -187,11 +200,15 @@ async function main() {
                   lastFootball.set(id, { home: curHome, away: curAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 }) } catch {} }
                 }
+                }
               } catch (e:any) { console.warn('football stagger fetch failed', e?.message || e) }
             }
             if (slot === 1 && apiKey) {
               // HANDBALL (date-based)
               try {
+                if (!canRun('handball', nowSec)) { console.log(new Date().toISOString(), '[STAGGER] handball cooldown active — skip'); }
+                else {
+                  markRun('handball', nowSec)
                 const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                 const url = new URL('https://v1.handball.api-sports.io/games')
                 const dateStr = new Date().toISOString().slice(0,10)
@@ -235,11 +252,15 @@ async function main() {
                   lastHand.set(id, { home: totHome, away: totAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'handball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
                 }
+                }
               } catch (e:any) { console.warn('handball stagger fetch failed', e?.message || e) }
             }
             if (slot === 2 && apiKey) {
               // VOLLEYBALL (date-based)
               try {
+                if (!canRun('volleyball', nowSec)) { console.log(new Date().toISOString(), '[STAGGER] volleyball cooldown active — skip'); }
+                else {
+                  markRun('volleyball', nowSec)
                 const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                 const url = new URL('https://v1.volleyball.api-sports.io/games')
                 const dateStr = new Date().toISOString().slice(0,10)
@@ -285,11 +306,15 @@ async function main() {
                   lastVolley.set(id, { home: totHome, away: totAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'volleyball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
                 }
+                }
               } catch (e:any) { console.warn('volleyball stagger fetch failed', e?.message || e) }
             }
             if (slot === 3 && apiKey) {
               // BASKETBALL (date-based)
               try {
+                if (!canRun('basketball', nowSec)) { console.log(new Date().toISOString(), '[STAGGER] basketball cooldown active — skip'); }
+                else {
+                  markRun('basketball', nowSec)
                 const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                 const url = new URL('https://v1.basketball.api-sports.io/games')
                 const dateStr = new Date().toISOString().slice(0,10)
@@ -334,6 +359,7 @@ async function main() {
                   }
                   lastBasket.set(id, { home: totHome, away: totAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'basketball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
+                }
                 }
               } catch (e:any) { console.warn('basketball stagger fetch failed', e?.message || e) }
             }

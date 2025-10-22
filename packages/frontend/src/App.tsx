@@ -51,6 +51,16 @@ import { createChart, ColorType, Time, IChartApi, ISeriesApi, UTCTimestamp } fro
 type Tick = { time: UTCTimestamp, value: number }
 type Candle = { time: UTCTimestamp, open: number, high: number, low: number, close: number }
 
+// Shared: map sport name to an emoji (covers the 4 sports)
+const sportEmoji = (s?: string) => ({
+  football: '⚽️',
+  soccer: '⚽️',
+  basketball: '🏀',
+  volleyball: '🏐',
+  handball: '🤾',
+  random: '🎲',
+} as any)[String(s||'').toLowerCase()] || ''
+
 // Helper: timeframe seconds
 function tfSeconds(tf: '1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'): number {
   switch (tf) {
@@ -441,7 +451,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                     const away = e.meta?.away?.name || 'Away'
                     const scHome = e.meta?.score?.home ?? '?'
                     const scAway = e.meta?.score?.away ?? '?'
-                    const emoji = e.meta?.emoji || ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[String(e.meta?.sport||'').toLowerCase()] || ''
+                    const emoji = e.meta?.emoji || sportEmoji(e.meta?.sport)
                     const type = String(e.meta?.type || '')
                     const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
                     return (
@@ -1292,7 +1302,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
     const t = window.setInterval(load, 60000)
     return () => { cancel = true; window.clearInterval(t) }
   }, [url])
-  const sportEmoji = (s: string) => ({ football:'⚽️', soccer:'⚽️', basketball:'🏀', volleyball:'🏐', handball:'🤾', random:'🎲' } as any)[(s||'').toLowerCase()] || ''
+  // Use shared sportEmoji helper for consistent mapping
   return (
     <div className="card">
       <div className="card-header"><h3>Eventos (recientes)</h3></div>

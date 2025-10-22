@@ -50,7 +50,7 @@ async function main() {
   const oracleAddr = (process.env.LOCALAWAY_ORACLE || '').trim()
   if (!oracleAddr) throw new Error('LOCALAWAY_ORACLE not set')
   const apiBase = (process.env.API_BASE || '').trim()
-  if (!apiBase) throw new Error('API_BASE not set (point to /api/football-live-goals)')
+  if (!apiBase) throw new Error('API_BASE not set (point to /api/football-live-goals or /api/sports-live)')
   const apiSecret = (process.env.API_SECRET || '').trim()
   const apiKey = (process.env.API_SPORTS_KEY || process.env.API_FOOTBALL_KEY || '').trim()
 
@@ -74,6 +74,7 @@ async function main() {
   const maxInterval = Number(process.env.MAX_INTERVAL_MS || '300000')
   const alwaysPollEveryMinute = String(process.env.ALWAYS_POLL_EVERY_MINUTE || 'true').toLowerCase() === 'true'
   const pushEveryTick = String(process.env.PUSH_EVERY_TICK || 'true').toLowerCase() === 'true'
+  const stagger15m = String(process.env.STAGGER_15M || 'true').toLowerCase() === 'true'
   // Optional fallback to legacy football processing when aggregator returns empty for several cycles
   const fallbackLegacy = String(process.env.AGGREGATOR_FALLBACK_LEGACY || 'true').toLowerCase() === 'true'
   const fallbackEmptyCycles = Math.max(1, Number(process.env.AGGREGATOR_FALLBACK_EMPTY_CYCLES || '3'))
@@ -104,12 +105,242 @@ async function main() {
     currentIndex = 10000
   }
 
+  // helpers for preflight push
+  const preflightAndPush = async (nextIndex: number, label: string) => {
+    const scaled = toScaled(nextIndex)
+    try {
+      const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
+      await simulateCall(oracleAddr, data)
+    } catch (e:any) {
+      console.warn('preflight push failed ('+label+') — skipping send', e?.message || e)
+      return null
+    }
+    const tx = await oracle.pushPrice(scaled)
+    await tx.wait()
+    return tx.hash
+  }
+
+  // derive specific endpoints for football when API_BASE points to aggregator
+  const footballUrl = (() => {
+    const override = (process.env.FOOTBALL_URL || '').trim()
+    if (override) return override
+    if (apiBase.includes('/api/sports-live')) return apiBase.replace('/api/sports-live','/api/football-live-goals')
+    return apiBase
+  })()
+
+  // slot scheduler state
+  let lastSlot = -1
+
   while (true) {
     try {
       let footballActivity = 0
       let anyActivity = false
       const aggregatorMode = apiBase.includes('/api/sports-live')
-      if (aggregatorMode) {
+      // Staggered mode first, then aggregator, else legacy
+      if (stagger15m) {
+          const nowSec = Math.floor(Date.now() / 1000)
+          const slot = Math.floor((nowSec % 900) / 225) // 0..3
+          if (slot !== lastSlot) {
+            lastSlot = slot
+            console.log(new Date().toISOString(), `[STAGGER] slot=${slot} (0=football,1=handball,2=volleyball,3=basketball)`)            
+            // order: 0=football, 1=handball, 2=volleyball, 3=basketball
+            if (slot === 0) {
+              // FOOTBALL (internal endpoint)
+              try {
+                const fixtures = await fetchLiteFixtures(footballUrl, apiSecret)
+                for (const f of fixtures) {
+                  const id = Number(f?.id); if (!id) continue
+                  const curHome = Number(f?.home?.goals ?? 0) || 0
+                  const curAway = Number(f?.away?.goals ?? 0) || 0
+                  let prev = lastFootball.get(id)
+                  if (!prev && lastApi && ingestSecret) {
+                    try {
+                      const u = new URL(lastApi)
+                      u.searchParams.set('secret', ingestSecret)
+                      u.searchParams.set('sport', 'football')
+                      u.searchParams.set('fixture', String(id))
+                      const r = await axios.get(u.toString(), { timeout: 8000 })
+                      if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                        prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                      }
+                    } catch {}
+                  }
+                  prev = prev || { home: curHome, away: curAway }
+                  const dHome = Math.max(0, curHome - prev.home)
+                  const dAway = Math.max(0, curAway - prev.away)
+                  if (!dHome && !dAway) { lastFootball.set(id, { home: curHome, away: curAway }); continue }
+                  anyActivity = true
+                  const netPct = (dHome * 0.001) - (dAway * 0.001)
+                  currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const hash = await preflightAndPush(currentIndex, 'football')
+                  if (hash) {
+                    console.log(new Date().toISOString(), `[FOOTBALL][STAGGER] ${f?.league?.name ?? 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${hash}`)
+                    if (ingestUrl && ingestSecret) {
+                      try {
+                        const time = Math.floor(Date.now()/1000)
+                        const value = currentIndex
+                        const meta = { type:'point', sport:'football', fixtureId: id, league: f?.league?.name, leagueId: (f as any)?.league?.id, home: { id:f?.home?.id, name:f?.home?.name }, away: { id:f?.away?.id, name:f?.away?.name }, score:{ home: curHome, away: curAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                        await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                      } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                    }
+                  }
+                  lastFootball.set(id, { home: curHome, away: curAway })
+                  if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 }) } catch {} }
+                }
+              } catch (e:any) { console.warn('football stagger fetch failed', e?.message || e) }
+            }
+            if (slot === 1 && apiKey) {
+              // HANDBALL (date-based)
+              try {
+                const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                const url = new URL('https://v1.handball.api-sports.io/games')
+                const dateStr = new Date().toISOString().slice(0,10)
+                url.searchParams.set('date', dateStr)
+                url.searchParams.set('timezone', 'UTC')
+                const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                for (const g of games) {
+                  const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                  const totHome = Number(g?.scores?.home ?? 0) || 0
+                  const totAway = Number(g?.scores?.away ?? 0) || 0
+                  let prev = lastHand.get(id)
+                  if (!prev && lastApi && ingestSecret) {
+                    try {
+                      const u = new URL(lastApi)
+                      u.searchParams.set('secret', ingestSecret)
+                      u.searchParams.set('sport', 'handball')
+                      u.searchParams.set('fixture', String(id))
+                      const r = await axios.get(u.toString(), { timeout: 8000 })
+                      if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                        prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                      }
+                    } catch {}
+                  }
+                  prev = prev || { home: totHome, away: totAway }
+                  const dHome = Math.max(0, totHome - prev.home)
+                  const dAway = Math.max(0, totAway - prev.away)
+                  if (!dHome && !dAway) { lastHand.set(id, { home: totHome, away: totAway }); continue }
+                  anyActivity = true
+                  const netPct = (dHome * 0.0001) - (dAway * 0.0001)
+                  currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const hash = await preflightAndPush(currentIndex, 'handball')
+                  if (hash && ingestUrl && ingestSecret) {
+                    try {
+                      const time = Math.floor(Date.now()/1000)
+                      const value = currentIndex
+                      const meta = { type:'point', sport:'handball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                    } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                  }
+                  lastHand.set(id, { home: totHome, away: totAway })
+                  if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'handball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
+                }
+              } catch (e:any) { console.warn('handball stagger fetch failed', e?.message || e) }
+            }
+            if (slot === 2 && apiKey) {
+              // VOLLEYBALL (date-based)
+              try {
+                const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                const url = new URL('https://v1.volleyball.api-sports.io/games')
+                const dateStr = new Date().toISOString().slice(0,10)
+                url.searchParams.set('date', dateStr)
+                url.searchParams.set('timezone', 'UTC')
+                const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                for (const g of games) {
+                  const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                  const periods = g?.scores?.periods || g?.periods || {}
+                  const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
+                  const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
+                  const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+                  let prev = lastVolley.get(id)
+                  if (!prev && lastApi && ingestSecret) {
+                    try {
+                      const u = new URL(lastApi)
+                      u.searchParams.set('secret', ingestSecret)
+                      u.searchParams.set('sport', 'volleyball')
+                      u.searchParams.set('fixture', String(id))
+                      const r = await axios.get(u.toString(), { timeout: 8000 })
+                      if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                        prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                      }
+                    } catch {}
+                  }
+                  prev = prev || { home: totHome, away: totAway }
+                  const dHome = Math.max(0, totHome - prev.home)
+                  const dAway = Math.max(0, totAway - prev.away)
+                  if (!dHome && !dAway) { lastVolley.set(id, { home: totHome, away: totAway }); continue }
+                  anyActivity = true
+                  const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                  currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const hash = await preflightAndPush(currentIndex, 'volleyball')
+                  if (hash && ingestUrl && ingestSecret) {
+                    try {
+                      const time = Math.floor(Date.now()/1000)
+                      const value = currentIndex
+                      const meta = { type:'point', sport:'volleyball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                    } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                  }
+                  lastVolley.set(id, { home: totHome, away: totAway })
+                  if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'volleyball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
+                }
+              } catch (e:any) { console.warn('volleyball stagger fetch failed', e?.message || e) }
+            }
+            if (slot === 3 && apiKey) {
+              // BASKETBALL (date-based)
+              try {
+                const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
+                const url = new URL('https://v1.basketball.api-sports.io/games')
+                const dateStr = new Date().toISOString().slice(0,10)
+                url.searchParams.set('date', dateStr)
+                url.searchParams.set('timezone', 'UTC')
+                const resp = await axios.get(url.toString(), { headers, timeout: 15000 })
+                const games = Array.isArray(resp.data?.response) ? resp.data.response : []
+                for (const g of games) {
+                  const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
+                  const home = g?.scores?.home || {}
+                  const away = g?.scores?.away || {}
+                  const totHome = Number(home?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(home?.[k] ?? 0) || 0), 0))) || 0
+                  const totAway = Number(away?.total ?? (['quarter_1','quarter_2','quarter_3','quarter_4','over_time'].reduce((s,k)=> s + (Number(away?.[k] ?? 0) || 0), 0))) || 0
+                  let prev = lastBasket.get(id)
+                  if (!prev && lastApi && ingestSecret) {
+                    try {
+                      const u = new URL(lastApi)
+                      u.searchParams.set('secret', ingestSecret)
+                      u.searchParams.set('sport', 'basketball')
+                      u.searchParams.set('fixture', String(id))
+                      const r = await axios.get(u.toString(), { timeout: 8000 })
+                      if (r.data && r.data.home !== undefined && r.data.away !== undefined) {
+                        prev = { home: Number(r.data.home)||0, away: Number(r.data.away)||0 }
+                      }
+                    } catch {}
+                  }
+                  prev = prev || { home: totHome, away: totAway }
+                  const dHome = Math.max(0, totHome - prev.home)
+                  const dAway = Math.max(0, totAway - prev.away)
+                  if (!dHome && !dAway) { lastBasket.set(id, { home: totHome, away: totAway }); continue }
+                  anyActivity = true
+                  const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                  currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const hash = await preflightAndPush(currentIndex, 'basketball')
+                  if (hash && ingestUrl && ingestSecret) {
+                    try {
+                      const time = Math.floor(Date.now()/1000)
+                      const value = currentIndex
+                      const meta = { type:'point', sport:'basketball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                    } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
+                  }
+                  lastBasket.set(id, { home: totHome, away: totAway })
+                  if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'basketball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
+                }
+              } catch (e:any) { console.warn('basketball stagger fetch failed', e?.message || e) }
+            }
+          } else {
+            // same slot — do nothing to respect per-sport 15-minute cadence
+          }
+      } else if (aggregatorMode) {
         // One consolidated call: /api/sports-live
         try {
           const u = new URL(apiBase)
@@ -429,6 +660,7 @@ async function main() {
           console.warn('aggregator fetch failed', e?.message || e)
         }
       } else {
+        // Legacy minute-based scheduling
         // FOOTBALL: single upstream call; apply +/-0.1% per goal per game (one tx per game)
         const fixtures = await fetchLiteFixtures(apiBase, apiSecret)
         for (const f of fixtures) {
@@ -500,10 +732,10 @@ async function main() {
         const processVolley  = [10,25,40,55].includes(minute)
         const processHand    = [0,15,30,45].includes(minute)
 
-        const headers = apiKey ? { 'x-apisports-key': apiKey, 'accept':'application/json' } : undefined
+  const headers = apiKey ? { 'x-apisports-key': apiKey, 'accept':'application/json' } : undefined
 
       // BASKETBALL: 0.001% per point (home +, away -), one tx per game
-      if (processBasket && apiKey) {
+  if (processBasket && apiKey) {
         try {
           const url = new URL('https://v1.basketball.api-sports.io/games')
           url.searchParams.set('live', 'all')
@@ -556,10 +788,10 @@ async function main() {
             }
           }
         } catch (e:any) { console.warn('basketball fetch failed', e?.message || e) }
-      }
+  }
 
       // VOLLEYBALL: 0.001% per point
-      if (processVolley && apiKey) {
+  if (processVolley && apiKey) {
         try {
           const url = new URL('https://v1.volleyball.api-sports.io/games')
           url.searchParams.set('live', 'all')
@@ -613,7 +845,7 @@ async function main() {
       }
 
       // HANDBALL: 0.01% per point
-      if (processHand && apiKey) {
+  if (processHand && apiKey) {
         try {
           const url = new URL('https://v1.handball.api-sports.io/games')
           url.searchParams.set('live', 'all')

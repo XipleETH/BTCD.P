@@ -599,6 +599,9 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
             {market === 'random' && (
               <RandomCard chainKey={chain} oracleAddress={oracleAddress} />
             )}
+            {market === 'localaway' && (
+              <GoalsCard chainKey={chain} />
+            )}
           </div>
         </section>
       </main>

@@ -106,18 +106,23 @@ async function main() {
   }
 
   // helpers for preflight push
-  const preflightAndPush = async (nextIndex: number, label: string) => {
+  const preflightAndPush = async (nextIndex: number, label: string): Promise<{ ok: boolean, hash?: string, err?: any }> => {
     const scaled = toScaled(nextIndex)
     try {
       const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
       await simulateCall(oracleAddr, data)
     } catch (e:any) {
       console.warn('preflight push failed ('+label+') — skipping send', e?.message || e)
-      return null
+      return { ok: false, err: e }
     }
-    const tx = await oracle.pushPrice(scaled)
-    await tx.wait()
-    return tx.hash
+    try {
+      const tx = await oracle.pushPrice(scaled)
+      await tx.wait()
+      return { ok: true, hash: tx.hash }
+    } catch (e:any) {
+      console.warn('send push failed ('+label+')', e?.message || e)
+      return { ok: false, err: e }
+    }
   }
 
   // derive specific endpoints for football when API_BASE points to aggregator
@@ -185,17 +190,19 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.001) - (dAway * 0.001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
-                  const hash = await preflightAndPush(currentIndex, 'football')
-                  if (hash) {
-                    console.log(new Date().toISOString(), `[FOOTBALL][STAGGER] ${f?.league?.name ?? 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${hash}`)
-                    if (ingestUrl && ingestSecret) {
-                      try {
-                        const time = Math.floor(Date.now()/1000)
-                        const value = currentIndex
-                        const meta = { type:'point', sport:'football', fixtureId: id, league: f?.league?.name, leagueId: (f as any)?.league?.id, home: { id:f?.home?.id, name:f?.home?.name }, away: { id:f?.away?.id, name:f?.away?.name }, score:{ home: curHome, away: curAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
-                        await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
-                      } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
-                    }
+                  const push = await preflightAndPush(currentIndex, 'football')
+                  if (push.ok && push.hash) {
+                    console.log(new Date().toISOString(), `[FOOTBALL][STAGGER] ${f?.league?.name ?? 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                  } else {
+                    console.log(new Date().toISOString(), `[FOOTBALL][STAGGER][NO-TX] ${f?.league?.name ?? 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                  }
+                  if (ingestUrl && ingestSecret) {
+                    try {
+                      const time = Math.floor(Date.now()/1000)
+                      const value = currentIndex
+                      const meta = { type:'point', sport:'football', fixtureId: id, league: f?.league?.name, leagueId: (f as any)?.league?.id, home: { id:f?.home?.id, name:f?.home?.name }, away: { id:f?.away?.id, name:f?.away?.name }, score:{ home: curHome, away: curAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
+                      await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
+                    } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
                   }
                   lastFootball.set(id, { home: curHome, away: curAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'football', fixture: id, home: curHome, away: curAway }, { timeout: 8000 }) } catch {} }
@@ -240,12 +247,17 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
-                  const hash = await preflightAndPush(currentIndex, 'handball')
-                  if (hash && ingestUrl && ingestSecret) {
+                  const push = await preflightAndPush(currentIndex, 'handball')
+                  if (push.ok && push.hash) {
+                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                  } else {
+                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                  }
+                  if (ingestUrl && ingestSecret) {
                     try {
                       const time = Math.floor(Date.now()/1000)
                       const value = currentIndex
-                      const meta = { type:'point', sport:'handball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      const meta = { type:'point', sport:'handball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                       await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
                     } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
                   }
@@ -294,12 +306,17 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
-                  const hash = await preflightAndPush(currentIndex, 'volleyball')
-                  if (hash && ingestUrl && ingestSecret) {
+                  const push = await preflightAndPush(currentIndex, 'volleyball')
+                  if (push.ok && push.hash) {
+                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                  } else {
+                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                  }
+                  if (ingestUrl && ingestSecret) {
                     try {
                       const time = Math.floor(Date.now()/1000)
                       const value = currentIndex
-                      const meta = { type:'point', sport:'volleyball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      const meta = { type:'point', sport:'volleyball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                       await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
                     } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
                   }
@@ -348,12 +365,17 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
-                  const hash = await preflightAndPush(currentIndex, 'basketball')
-                  if (hash && ingestUrl && ingestSecret) {
+                  const push = await preflightAndPush(currentIndex, 'basketball')
+                  if (push.ok && push.hash) {
+                    console.log(new Date().toISOString(), `[BASKET][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                  } else {
+                    console.log(new Date().toISOString(), `[BASKET][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                  }
+                  if (ingestUrl && ingestSecret) {
                     try {
                       const time = Math.floor(Date.now()/1000)
                       const value = currentIndex
-                      const meta = { type:'point', sport:'basketball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct }
+                      const meta = { type:'point', sport:'basketball', league: g?.league?.name || g?.country?.name || 'League', home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta:{ home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                       await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
                     } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
                   }
@@ -391,23 +413,17 @@ async function main() {
             if (sport === 'football') footballActivity++
             anyActivity = true
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
-            const scaled = toScaled(currentIndex)
-            // preflight simulate to catch reverts (e.g., permissions)
-            try {
-              const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
-              await simulateCall(oracleAddr, data)
-            } catch (e:any) {
-              console.warn('preflight push failed (skipping send)', e?.message || e)
-              continue
+            const push = await preflightAndPush(currentIndex, sport)
+            if (push.ok && push.hash) {
+              console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+            } else {
+              console.log(new Date().toISOString(), `[${sport.toUpperCase()}][NO-TX] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
             }
-            const tx = await oracle.pushPrice(scaled)
-            await tx.wait()
-            console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
                 const value = currentIndex
-                const meta = { type:'point', sport, fixtureId: id, league: it?.league, leagueId: it?.leagueId, home: it?.home, away: it?.away, score: it?.score, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                const meta = { type:'point', sport, fixtureId: id, league: it?.league, leagueId: it?.leagueId, home: it?.home, away: it?.away, score: it?.score, delta: { home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                 await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
@@ -715,19 +731,12 @@ async function main() {
           anyActivity = true
           const netPct = (dHome * 0.001) - (dAway * 0.001) // 0.1% per goal
           currentIndex = Math.max(1, currentIndex * (1 + netPct))
-          const scaled = toScaled(currentIndex)
-          try {
-            const data = (oracle as any).interface.encodeFunctionData('pushPrice', [scaled])
-            await simulateCall(oracleAddr, data)
-          } catch (e:any) {
-            console.warn('preflight push failed (tick) — skipping send', e?.message || e)
-            // Skip pushing to avoid revert storms
-            await sleep(1000)
-            continue
+          const push = await preflightAndPush(currentIndex, 'football')
+          if (push.ok && push.hash) {
+            console.log(new Date().toISOString(), `[FOOTBALL] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+          } else {
+            console.log(new Date().toISOString(), `[FOOTBALL][NO-TX] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
           }
-          const tx = await oracle.pushPrice(scaled)
-          await tx.wait()
-          console.log(new Date().toISOString(), `[FOOTBALL] ${f?.league?.name ?? 'League'} ${f?.home?.name} ${curHome}-${curAway} ${f?.away?.name} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
           if (ingestUrl && ingestSecret) {
             try {
               const time = Math.floor(Date.now() / 1000)
@@ -739,7 +748,8 @@ async function main() {
                 away: { id: f?.away?.id, name: f?.away?.name },
                 score: { home: curHome, away: curAway },
                 delta: { home: dHome, away: dAway },
-                deltaPct: netPct
+                deltaPct: netPct,
+                note: push.ok ? undefined : 'push-skipped'
               }
               await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
             } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
@@ -795,16 +805,18 @@ async function main() {
             if (dHome === 0 && dAway === 0) { lastBasket.set(id, { home: totHome, away: totAway }); continue }
             const netPct = (dHome * 0.00001) - (dAway * 0.00001) // 0.001% = 0.00001 fraction
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
-            const scaled = toScaled(currentIndex)
-            const tx = await oracle.pushPrice(scaled)
-            await tx.wait()
-            console.log(new Date().toISOString(), `[BASKET] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            const push = await preflightAndPush(currentIndex, 'basketball')
+            if (push.ok && push.hash) {
+              console.log(new Date().toISOString(), `[BASKET] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+            } else {
+              console.log(new Date().toISOString(), `[BASKET][NO-TX] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+            }
             anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
                 const value = currentIndex
-                const meta = { type:'point', sport:'basketball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                const meta = { type:'point', sport:'basketball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                 await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
@@ -849,16 +861,18 @@ async function main() {
             if (dHome === 0 && dAway === 0) { lastVolley.set(id, { home: totHome, away: totAway }); continue }
             const netPct = (dHome * 0.00001) - (dAway * 0.00001)
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
-            const scaled = toScaled(currentIndex)
-            const tx = await oracle.pushPrice(scaled)
-            await tx.wait()
-            console.log(new Date().toISOString(), `[VOLLEY] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            const push = await preflightAndPush(currentIndex, 'volleyball')
+            if (push.ok && push.hash) {
+              console.log(new Date().toISOString(), `[VOLLEY] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+            } else {
+              console.log(new Date().toISOString(), `[VOLLEY][NO-TX] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+            }
             anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
                 const value = currentIndex
-                const meta = { type:'point', sport:'volleyball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                const meta = { type:'point', sport:'volleyball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                 await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }
@@ -901,16 +915,18 @@ async function main() {
             if (dHome === 0 && dAway === 0) { lastHand.set(id, { home: totHome, away: totAway }); continue }
             const netPct = (dHome * 0.0001) - (dAway * 0.0001) // 0.01%
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
-            const scaled = toScaled(currentIndex)
-            const tx = await oracle.pushPrice(scaled)
-            await tx.wait()
-            console.log(new Date().toISOString(), `[HANDBALL] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${tx.hash}`)
+            const push = await preflightAndPush(currentIndex, 'handball')
+            if (push.ok && push.hash) {
+              console.log(new Date().toISOString(), `[HANDBALL] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+            } else {
+              console.log(new Date().toISOString(), `[HANDBALL][NO-TX] ${leagueName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(3)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+            }
             anyActivity = true
             if (ingestUrl && ingestSecret) {
               try {
                 const time = Math.floor(Date.now()/1000)
                 const value = currentIndex
-                const meta = { type:'point', sport:'handball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct }
+                const meta = { type:'point', sport:'handball', league: leagueName, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct, note: push.ok ? undefined : 'push-skipped' }
                 await axios.post(ingestUrl, { secret: ingestSecret, chain, market, time, value, meta }, { timeout: 8000 })
               } catch (e:any) { console.warn('ingest sync failed', e?.message || e) }
             }

@@ -131,11 +131,24 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: [] })
     }
 
-    // Fallback: if no cached events for localaway, try querying our Edge live-goals endpoint in full mode (may use multiple API calls)
+    // Fallback: if no cached events for localaway, try querying our Edge live-goals endpoint.
+    // Rate-limit this fallback to once per 15 minutes per chain to avoid hammering API-Football.
     // Only do this when market=localaway; otherwise return empty
     if (market !== 'localaway') return json({ events: [] })
 
     try {
+      // Guard fetch frequency with Redis key
+      const now = Math.floor(Date.now()/1000)
+      const guardKey = `btcd:events:fallback:football:last_ts:${chain}`
+      try {
+        const lastTsStr = await redis.get<string>(guardKey)
+        const lastTs = lastTsStr ? Number(lastTsStr) : 0
+        if (lastTs && (now - lastTs) < 900) {
+          // Within 15 minutes window — skip calling upstream
+          return json({ events: [] })
+        }
+      } catch {}
+
       const origin = new URL(req.url).origin
       const url = new URL(origin + '/api/football-live-goals')
       if (leagues) url.searchParams.set('leagues', leagues)
@@ -157,6 +170,7 @@ export default async function handler(req: Request): Promise<Response> {
               value: null,
               meta: {
                 type: 'goal',
+                sport: 'football',
                 side,
                 delta: side === 'home' ? +1 : (side === 'away' ? -1 : 0),
                 fixtureId: f?.id,
@@ -168,6 +182,7 @@ export default async function handler(req: Request): Promise<Response> {
                 minute: g?.minute ?? null,
                 player: g?.player ?? null,
                 assist: g?.assist ?? null,
+                emoji: '⚽️',
               }
             }
             flat.push(payload)
@@ -186,6 +201,8 @@ export default async function handler(req: Request): Promise<Response> {
             }
             await redis.ltrim(eventsKey, 0, eventsMax - 1)
           } catch {}
+          // Store guard timestamp with 15-minute TTL
+          try { await redis.set(guardKey, String(now), { ex: 900 }) } catch {}
         }
         return json({ events: recent })
       }

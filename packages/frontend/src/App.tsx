@@ -451,7 +451,8 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                     const away = e.meta?.away?.name || 'Away'
                     const scHome = e.meta?.score?.home ?? '?'
                     const scAway = e.meta?.score?.away ?? '?'
-                    const emoji = e.meta?.emoji || sportEmoji(e.meta?.sport)
+                    const inferredSport = String(e.meta?.sport || (String(e.meta?.type||'').toLowerCase()==='goal' ? 'football' : ''))
+                    const emoji = (e.meta?.emoji && String(e.meta?.emoji).length>0) ? e.meta.emoji : sportEmoji(inferredSport)
                     const type = String(e.meta?.type || '')
                     const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
                     return (
@@ -1318,8 +1319,8 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               const away = e.meta?.away?.name || 'Away'
               const scHome = e.meta?.score?.home ?? '?'
               const scAway = e.meta?.score?.away ?? '?'
-              const sport = String(e.meta?.sport || '')
-              const emoji = e.meta?.emoji || sportEmoji(sport)
+              const sport = String(e.meta?.sport || (String(e.meta?.type||'').toLowerCase()==='goal' ? 'football' : ''))
+              const emoji = (e.meta?.emoji && String(e.meta?.emoji).length>0) ? e.meta.emoji : sportEmoji(sport)
               const type = String(e.meta?.type || '')
               const dH = Number(e.meta?.delta?.home ?? 0) || 0
               const dA = Number(e.meta?.delta?.away ?? 0) || 0

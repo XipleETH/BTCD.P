@@ -700,7 +700,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
   // Shared events fetcher (avoids duplicate polling across components)
   const chainParam = chain === 'baseSepolia' ? 'base-sepolia' : 'base'
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const useEvents = (mkt: 'localaway'|'random') => {
+  const useEvents = (mkt: 'localaway'|'random', enabled: boolean) => {
     const url = mkt === 'random'
       ? `${baseUrl}/api/events?chain=${chainParam}&market=random&limit=100&oracle=${encodeURIComponent(oracleAddress||'')}`
       : `${baseUrl}/api/events?chain=${chainParam}&market=localaway&limit=100`
@@ -726,11 +726,14 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
       staleTime: 45_000,
       refetchInterval: 60_000,
       refetchOnWindowFocus: false,
+      enabled,
     })
   }
 
-  const { data: eventsLocalAway = [], isFetching: loadingLocalAway } = market==='localaway' ? useEvents('localaway') : ({ data: [], isFetching: false } as any)
-  const { data: eventsRandom = [], isFetching: loadingRandom } = market==='random' ? useEvents('random') : ({ data: [], isFetching: false } as any)
+  const enableLocalAway = market === 'localaway'
+  const enableRandom = market === 'random' && Boolean(oracleAddress)
+  const { data: eventsLocalAway = [], isFetching: loadingLocalAway } = useEvents('localaway', enableLocalAway)
+  const { data: eventsRandom = [], isFetching: loadingRandom } = useEvents('random', enableRandom)
 
   return (
     <I18nContext.Provider value={{ lang, t }}>

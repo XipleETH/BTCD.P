@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef, useContext, createContext } from 
 import { http, WagmiProvider, useSwitchChain, useAccount } from 'wagmi'
 import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
 import './styles.css'
 import { deployed } from './addresses'
@@ -277,21 +277,14 @@ function normalizeContinuity(cs: Candle[]): Candle[] {
   return out
 }
 
-function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
+function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, localawayLoading, randomEvents, randomLoading }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway', localawayEvents?: Array<{time:number,value:number,meta:any}>, localawayLoading?: boolean, randomEvents?: Array<{time:number,value:number,meta?:any}>, randomLoading?: boolean }) {
   const { t, lang } = useI18n()
   const [tf, setTf] = useState<'1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
   const [overlayTop, setOverlayTop] = useState<number>(8)
   const [livePrice, setLivePrice] = useState<number | null>(null)
-  // Events banner state (LocalAway only)
-  const [bannerEvents, setBannerEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
-  const [bannerLoading, setBannerLoading] = useState<boolean>(false)
-  const [bannerHadCache, setBannerHadCache] = useState<boolean>(false)
-  // Random banner state (Random only)
-  const [randBanner, setRandBanner] = useState<Array<{ time:number, value:number }>>([])
-  const [randLoading, setRandLoading] = useState<boolean>(false)
-  const [randHadCache, setRandHadCache] = useState<boolean>(false)
+  // Events from parent hook
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
@@ -376,97 +369,9 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
     return () => { if (t) window.clearTimeout(t) }
   }, [chainKey, tf, market])
 
-  // Load events for banner (LocalAway only) — always show the banner
-  useEffect(() => {
-    if (market !== 'localaway') { setBannerEvents([]); setBannerHadCache(false); return }
-    let cancel = false
-    const limit = 20
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-    const url = `${baseUrl}/api/events?chain=${chainParam}&market=localaway&limit=${limit}`
-    const lsKey = `btcd:banner:${chainParam}:localaway`
-    const load = async () => {
-      try {
-        setBannerLoading(true)
-        // Bootstrap from localStorage so the banner shows "last known" events immediately
-        try {
-          const raw = localStorage.getItem(lsKey)
-          if (raw && !cancel) {
-            const arr = JSON.parse(raw)
-            if (Array.isArray(arr) && arr.length) {
-              setBannerEvents(arr)
-              setBannerHadCache(true)
-            }
-          }
-        } catch {}
-        const res = await fetch(url, { cache: 'no-store' })
-        if (!res.ok) return
-        const j = await res.json()
-        const evs = Array.isArray(j?.events) ? j.events : []
-        if (!cancel) {
-          if (evs.length) {
-            setBannerEvents(evs)
-            setBannerHadCache(false)
-            try { localStorage.setItem(lsKey, JSON.stringify(evs)) } catch {}
-          } else {
-            // If API returns empty, keep whatever we had (cache or previous fetch)
-            // If we had no cache and nothing fetched, banner will still render as empty container
-          }
-        }
-      } catch {}
-      setBannerLoading(false)
-    }
-    load()
-    const t = window.setInterval(load, 60000)
-    return () => { cancel = true; window.clearInterval(t) }
-  }, [market, chainParam])
+  // No internal fetch: events provided by parent hook
 
-  // Load recent random numbers for banner (Random only) — always show the banner
-  useEffect(() => {
-    if (market !== 'random') { setRandBanner([]); setRandHadCache(false); return }
-    let cancel = false
-    const limit = 20
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-    const url = `${baseUrl}/api/events?chain=${chainParam}&market=random&limit=${limit}&oracle=${encodeURIComponent(oracleAddress||'')}`
-    const lsKey = `btcd:banner:${chainParam}:random`
-    const load = async () => {
-      try {
-        setRandLoading(true)
-        // Bootstrap from localStorage
-        try {
-          const raw = localStorage.getItem(lsKey)
-          if (raw && !cancel) {
-            const arr = JSON.parse(raw)
-            if (Array.isArray(arr) && arr.length) {
-              setRandBanner(arr)
-              setRandHadCache(true)
-            }
-          }
-        } catch {}
-        const res = await fetch(url, { cache: 'no-store' })
-        if (res.ok) {
-          const j = await res.json()
-          const evs = Array.isArray(j?.events) ? j.events : []
-          // Normalize to {time,value} newest-first
-          const rows = evs.map((e:any)=> ({ time: Number(e?.time)||0, value: Number(e?.value) }))
-            .filter((r: { time:number, value:number })=> Number.isFinite(r.time) && Number.isFinite(r.value))
-            .sort((a: { time:number }, b: { time:number })=> b.time - a.time)
-          if (!cancel) {
-            if (rows.length) {
-              setRandBanner(rows)
-              setRandHadCache(false)
-              try { localStorage.setItem(lsKey, JSON.stringify(rows)) } catch {}
-            } else {
-              // Keep cache if API empty; optional: fallback to on-chain scan (heavy)
-            }
-          }
-        }
-      } catch {}
-      setRandLoading(false)
-    }
-    load()
-    const t = window.setInterval(load, 60000)
-    return () => { cancel = true; window.clearInterval(t) }
-  }, [market, chainParam, oracleAddress])
+  // No internal fetch: random events provided by parent hook
 
   // Poll latestAnswer/latestTimestamp to append live points
   const { data: latestAns } = useReadContract({
@@ -635,8 +540,8 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                 alignItems:'center',
                 minHeight: 28
               }}>
-                {bannerEvents.length > 0 ? (
-                  bannerEvents.slice(0, 8).map((e, idx) => {
+                {Array.isArray(localawayEvents) && localawayEvents.length > 0 ? (
+                  localawayEvents.slice(0, 8).map((e, idx) => {
                     const lg = e.meta?.league || ''
                     const home = e.meta?.home?.name || 'Home'
                     const away = e.meta?.away?.name || 'Away'
@@ -659,7 +564,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                   })
                 ) : (
                   <div className="muted small" style={{ opacity:0.8 }}>
-                    {bannerLoading ? t('chart_loading_events') : (bannerHadCache ? t('chart_showing_last') : t('chart_no_events'))}
+                    {localawayLoading ? t('chart_loading_events') : t('chart_no_events')}
                   </div>
                 )}
               </div>
@@ -680,19 +585,19 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                 alignItems:'center',
                 minHeight: 28
               }}>
-                {randBanner.length > 0 ? (
-                  randBanner.slice(0, 8).map((r, idx) => {
-                    const prev = randBanner[idx+1]?.value
+                {Array.isArray(randomEvents) && randomEvents.length > 0 ? (
+                  randomEvents.slice(0, 8).map((r, idx) => {
+                    const prev = randomEvents[idx+1]?.value
                     const stepBps = (typeof prev === 'number' && prev > 0)
-                      ? Math.round(((r.value - prev) / prev) * 10000)
+                      ? Math.round(((Number(r.value) - prev) / prev) * 10000)
                       : null
                     const sign = stepBps !== null ? (stepBps > 0 ? `+${stepBps}` : `${stepBps}`) : '—'
-                    const rounded = Math.round(r.value)
+                    const rounded = Math.round(Number(r.value))
                     return (
                       <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
                         <div style={{ width:20, textAlign:'center' }}>🎲</div>
                         <div style={{ fontSize:13, display:'flex', alignItems:'baseline', gap:8 }}>
-                          <strong>{r.value.toFixed(4)}</strong>
+                          <strong>{Number(r.value).toFixed(4)}</strong>
                           <span className={stepBps !== null ? (stepBps >= 0 ? 'pnl up small' : 'pnl down small') : 'muted small'}>
                             ({sign} bps)
                           </span>
@@ -703,7 +608,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                   })
                 ) : (
                   <div className="muted small" style={{ opacity:0.8 }}>
-                    {randLoading ? t('chart_loading_numbers') : (randHadCache ? t('chart_showing_last') : t('chart_no_numbers'))}
+                    {randomLoading ? t('chart_loading_numbers') : t('chart_no_numbers')}
                   </div>
                 )}
               </div>
@@ -792,6 +697,41 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
     setPerpsAddress(entry?.perps || '')
   }, [chain, market])
 
+  // Shared events fetcher (avoids duplicate polling across components)
+  const chainParam = chain === 'baseSepolia' ? 'base-sepolia' : 'base'
+  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+  const useEvents = (mkt: 'localaway'|'random') => {
+    const url = mkt === 'random'
+      ? `${baseUrl}/api/events?chain=${chainParam}&market=random&limit=100&oracle=${encodeURIComponent(oracleAddress||'')}`
+      : `${baseUrl}/api/events?chain=${chainParam}&market=localaway&limit=100`
+    const lsKey = `btcd:events:${chainParam}:${mkt}`
+    return useQuery({
+      queryKey: ['events', chainParam, mkt, oracleAddress || ''],
+      queryFn: async () => {
+        const res = await fetch(url, { cache: 'no-store' })
+        if (!res.ok) return [] as any[]
+        const j = await res.json()
+        const evs = Array.isArray(j?.events) ? j.events : []
+        try { if (evs.length) localStorage.setItem(lsKey, JSON.stringify(evs)) } catch {}
+        return evs
+      },
+      initialData: () => {
+        try {
+          const raw = localStorage.getItem(lsKey)
+          if (!raw) return []
+          const arr = JSON.parse(raw)
+          return Array.isArray(arr) ? arr : []
+        } catch { return [] }
+      },
+      staleTime: 45_000,
+      refetchInterval: 60_000,
+      refetchOnWindowFocus: false,
+    })
+  }
+
+  const { data: eventsLocalAway = [], isFetching: loadingLocalAway } = market==='localaway' ? useEvents('localaway') : ({ data: [], isFetching: false } as any)
+  const { data: eventsRandom = [], isFetching: loadingRandom } = market==='random' ? useEvents('random') : ({ data: [], isFetching: false } as any)
+
   return (
     <I18nContext.Provider value={{ lang, t }}>
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
@@ -848,7 +788,15 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
 
       <main className="main">
         <section className="main-top">
-          <DominanceChart oracleAddress={oracleAddress} chainKey={chain} market={market} />
+          <DominanceChart
+            oracleAddress={oracleAddress}
+            chainKey={chain}
+            market={market}
+            localawayEvents={market==='localaway' ? eventsLocalAway : undefined}
+            localawayLoading={market==='localaway' ? loadingLocalAway : undefined}
+            randomEvents={market==='random' ? eventsRandom : undefined}
+            randomLoading={market==='random' ? loadingRandom : undefined}
+          />
         </section>
 
         <section className="main-grid">
@@ -860,10 +808,10 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
           <div className="col">
             <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
             {market === 'random' && (
-              <RandomCard chainKey={chain} oracleAddress={oracleAddress} />
+              <RandomCard chainKey={chain} oracleAddress={oracleAddress} items={eventsRandom} loading={loadingRandom} />
             )}
             {market === 'localaway' && (
-              <GoalsCard chainKey={chain} />
+              <GoalsCard chainKey={chain} events={eventsLocalAway} loading={loadingLocalAway} />
             )}
           </div>
         </section>
@@ -1565,76 +1513,8 @@ function CopyBtn({ text }: { text: string }) {
   return <button className="btn sm" onClick={()=>navigator.clipboard?.writeText(text || '')}>{t('common_copy')}</button>
 }
 
-function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+function GoalsCard({ chainKey, events, loading }: { chainKey: 'base'|'baseSepolia', events: Array<{ time:number, value:number, meta:any }>, loading: boolean }) {
   const { t } = useI18n()
-  const [events, setEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
-  const [loading, setLoading] = useState(false)
-  const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const limit = 100
-  const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=${limit}`
-  const lsKey = `btcd:events:${chain}:localaway`
-  useEffect(() => {
-    let cancel = false
-    const load = async () => {
-      try {
-        setLoading(true)
-        // Bootstrap from localStorage: never show an empty recent-events menu
-        try {
-          const raw = localStorage.getItem(lsKey)
-          if (raw && !cancel) {
-            const arr = JSON.parse(raw)
-            if (Array.isArray(arr) && arr.length) {
-              setEvents(arr)
-            }
-          }
-        } catch {}
-        const res = await fetch(url, { cache: 'no-store' })
-        if (res.ok) {
-          const j = await res.json()
-          const evs = Array.isArray(j.events) ? j.events : []
-          if (!cancel) {
-            if (evs.length) {
-              // Merge with existing, de-dup by stable meta.id or derived key
-              const map = new Map<string, any>()
-              const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
-              for (const e of events) map.set(keyOf(e), e)
-              for (const e of evs) map.set(keyOf(e), e)
-              const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
-              setEvents(merged)
-              try { localStorage.setItem(lsKey, JSON.stringify(merged)) } catch {}
-            } else {
-              // Keep displaying whatever we already had (from cache or earlier fetch)
-            }
-          }
-          // Fallback: if empty, try alternate chain key once
-          if (!cancel && (!evs || evs.length === 0)) {
-            const alt = chain === 'base-sepolia' ? 'base' : 'base-sepolia'
-            try {
-              const res2 = await fetch(`${baseUrl}/api/events?chain=${alt}&market=localaway&limit=${limit}`, { cache: 'no-store' })
-              if (res2.ok) {
-                const j2 = await res2.json()
-                const evs2 = Array.isArray(j2.events) ? j2.events : []
-                if (!cancel && evs2.length) {
-                  const map = new Map<string, any>()
-                  const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
-                  for (const e of events) map.set(keyOf(e), e)
-                  for (const e of evs2) map.set(keyOf(e), e)
-                  const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
-                  setEvents(merged)
-                  try { localStorage.setItem(lsKey, JSON.stringify(merged)) } catch {}
-                }
-              }
-            } catch {}
-          }
-        }
-      } catch {}
-      setLoading(false)
-    }
-    load()
-    const t = window.setInterval(load, 60000)
-    return () => { cancel = true; window.clearInterval(t) }
-  }, [url])
   // Use shared sportEmoji helper for consistent mapping
   return (
     <div className="card">
@@ -1684,68 +1564,8 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   )
 }
 
-function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia', oracleAddress: string }) {
+function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'base'|'baseSepolia', oracleAddress: string, items: Array<{ time:number, value:number }>, loading: boolean }) {
   const { t } = useI18n()
-  const [items, setItems] = useState<Array<{ time:number, value:number }>>([])
-  const [loading, setLoading] = useState(false)
-  const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
-  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
-  const url = `${baseUrl}/api/events?chain=${chain}&market=random&limit=30&oracle=${encodeURIComponent(oracleAddress||'')}`
-  useEffect(() => {
-    let cancel = false
-    const load = async () => {
-      try {
-        setLoading(true)
-        const res = await fetch(url, { cache: 'no-store' })
-        if (res.ok) {
-          const j = await res.json()
-          const evs = Array.isArray(j.events) ? j.events : []
-          // Normalize to time/value only, newest-first
-          const rows = evs.map((e:any)=> ({ time: Number(e?.time)||0, value: Number(e?.value) }))
-            .filter((r: { time:number, value:number })=> Number.isFinite(r.time) && Number.isFinite(r.value))
-            .sort((a: { time:number }, b: { time:number })=> b.time - a.time)
-          if (!cancel) setItems(rows)
-          // Fallback to on-chain logs if empty or missing
-          if (!cancel && (!rows || rows.length === 0) && oracleAddress) {
-            try {
-              const desired = (chainKey === 'baseSepolia' ? baseSepolia : base)
-              const client = createPublicClient({ chain: desired as any, transport: viemHttp() })
-              const latest = await client.getBlockNumber()
-              // scan ~20k blocks back (tweakable)
-              const from = latest > 20000n ? (latest - 20000n) : 0n
-              const logs = await client.getLogs({
-                address: oracleAddress as any,
-                events: [{
-                  type: 'event',
-                  name: 'PriceUpdated',
-                  inputs: [
-                    { name: 'price', type: 'int256', indexed: false },
-                    { name: 'timestamp', type: 'uint256', indexed: false },
-                  ],
-                  anonymous: false,
-                }] as any,
-                fromBlock: from,
-                toBlock: latest,
-              }) as any[]
-              const mapped = logs.map((l:any)=>{
-                const args = l?.args || {}
-                const raw = typeof args?.price === 'bigint' ? args.price : BigInt(args?.price || 0)
-                const ts = Number(args?.timestamp || 0)
-                const dec = Number(formatUnits(raw, 8))
-                return { time: ts, value: dec, _raw: raw }
-              }).filter((r:any)=> Number.isFinite(r.time) && Number.isFinite(r.value))
-                .sort((a:any,b:any)=> b.time - a.time)
-              if (!cancel && mapped.length) setItems(mapped)
-            } catch {}
-          }
-        }
-      } catch {}
-      setLoading(false)
-    }
-    load()
-    const t = window.setInterval(load, 60000)
-    return () => { cancel = true; window.clearInterval(t) }
-  }, [url])
   return (
     <div className="card">
       <div className="card-header"><h3>{t('random_title')}</h3></div>

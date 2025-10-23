@@ -740,16 +740,9 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
         <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
-          {/* Top row: Brand + Language toggle */}
+          {/* Top row: Brand only */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', gap:8, flexWrap:'wrap' }}>
             <div className="brand">Perp-it</div>
-            {/* Language toggle next to title */}
-            <div className="lang-menu">
-              <div className="segmented">
-                <button className={lang==='es' ? 'seg active':'seg'} onClick={()=>{ setLang('es'); try{localStorage.setItem('btcd:ui:lang','es')}catch{} }}>ES</button>
-                <button className={lang==='en' ? 'seg active':'seg'} onClick={()=>{ setLang('en'); try{localStorage.setItem('btcd:ui:lang','en')}catch{} }}>EN</button>
-              </div>
-            </div>
           </div>
           {/* Second row: Network menu under title */}
           <div className="network-menu" style={{ marginTop: 2 }}>
@@ -785,8 +778,16 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
             </div>
           </div>
         </div>
-        {/* The ConnectButton includes a chain switcher; switching there auto-updates the page */}
-        <div className="header-right"><ConnectButton /></div>
+        {/* Right side: Wallet on top, language buttons below (right aligned) */}
+        <div className="header-right">
+          <ConnectButton />
+          <div className="lang-menu">
+            <div className="segmented">
+              <button className={lang==='es' ? 'seg active':'seg'} onClick={()=>{ setLang('es'); try{localStorage.setItem('btcd:ui:lang','es')}catch{} }}>ES</button>
+              <button className={lang==='en' ? 'seg active':'seg'} onClick={()=>{ setLang('en'); try{localStorage.setItem('btcd:ui:lang','en')}catch{} }}>EN</button>
+            </div>
+          </div>
+        </div>
       </header>
 
       <main className="main">
@@ -1577,9 +1578,9 @@ function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'ba
           <div className="muted">{t('random_none')}</div>
         ) : (
           <div className="list">
-            {items.map((r, idx)=>{
+            {items.slice(0, 8).map((r, idx)=>{
               // Compute step in bps versus the immediately older value (same data as chart)
-              const prev = items[idx+1]?.value
+              const prev = items.slice(0, 8)[idx+1]?.value
               const stepBps = (typeof prev === 'number' && prev > 0)
                 ? Math.round(((r.value - prev) / prev) * 10000)
                 : null

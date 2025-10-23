@@ -26,6 +26,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .container { max-width: 1240px; margin: 0 auto; padding: 18px; }
 .header { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
 .header-left { display: flex; align-items: center; gap: 16px; flex-direction: column; align-items: stretch; }
+.header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .brand {
   font-weight: 900;
   letter-spacing: 0.6px;
@@ -115,6 +116,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
   .main-grid { grid-template-columns: 1fr; }
   .brand { font-size: 28px; }
   .header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .header-right { align-items: flex-end; }
   .network-switcher, .network-menu { flex-wrap: wrap; }
   .seg { padding: 8px 10px; }
 }

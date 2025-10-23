@@ -932,28 +932,55 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
       return abs
     }
   }
-  const onSet = async () => {
+  // Read current stops to preserve the other value when setting just one
+  const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
+
+  const onSetSL = async () => {
     const slAbs = slInput ? computeAbs(slInput, true) : 0
-    const tpAbs = tpInput ? computeAbs(tpInput, false) : 0
-    if (slAbs === null || tpAbs === null) return
+    if (slAbs === null) return
     const sl = slAbs ? toScaledAbs(slAbs) : 0n
-    const tp = tpAbs ? toScaledAbs(tpAbs) : 0n
-    if (sl === null || tp === null) return
+    if (sl === null) return
+    const tpKeep = (typeof takeProfit === 'bigint') ? takeProfit : 0n
     try {
       await writeContract({
         abi: perpsAbi as any,
         address: perpsAddress as any,
         functionName: 'setStops',
-        args: [sl as any, tp as any],
+        args: [sl as any, tpKeep as any],
         chainId: desiredChain.id,
       })
     } catch (e:any) {
-      // Fallback: provide a fixed gas limit to bypass estimation issues
       await writeContract({
         abi: perpsAbi as any,
         address: perpsAddress as any,
         functionName: 'setStops',
-        args: [sl as any, tp as any],
+        args: [sl as any, tpKeep as any],
+        chainId: desiredChain.id,
+        gas: 200000n,
+      })
+    }
+  }
+
+  const onSetTP = async () => {
+    const tpAbs = tpInput ? computeAbs(tpInput, false) : 0
+    if (tpAbs === null) return
+    const tp = tpAbs ? toScaledAbs(tpAbs) : 0n
+    if (tp === null) return
+    const slKeep = (typeof stopLoss === 'bigint') ? stopLoss : 0n
+    try {
+      await writeContract({
+        abi: perpsAbi as any,
+        address: perpsAddress as any,
+        functionName: 'setStops',
+        args: [slKeep as any, tp as any],
+        chainId: desiredChain.id,
+      })
+    } catch (e:any) {
+      await writeContract({
+        abi: perpsAbi as any,
+        address: perpsAddress as any,
+        functionName: 'setStops',
+        args: [slKeep as any, tp as any],
         chainId: desiredChain.id,
         gas: 200000n,
       })
@@ -969,7 +996,6 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
       gas: 350000n,
     })
   }
-  const [stopLoss, takeProfit] = (stops || []) as [bigint, bigint]
   const trigArr = (trig || []) as [boolean, boolean, boolean]
   const slPreview = slInput ? computeAbs(slInput, true) : null
   const tpPreview = tpInput ? computeAbs(tpInput, false) : null
@@ -980,18 +1006,25 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
         <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>{market==='btcd' ? 'Absoluto (%)' : 'Absoluto (índice)'}</button>
         <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>{market==='btcd' ? 'Relativo (Δ%)' : 'Relativo (Δ índice)'}</button>
       </div>
-      <div className="row">
-        <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'SL % (ej 60.10)' : 'SL abs (ej 995.5)') : (market==='btcd' ? 'SL Δ% (ej -1.0)' : 'SL Δ (ej -5)')} value={slInput} onChange={e=>setSlInput(e.target.value)} />
-        <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'TP % (ej 61.20)' : 'TP abs (ej 1002.0)') : (market==='btcd' ? 'TP Δ% (ej +1.5)' : 'TP Δ (ej +8)')} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
-        {(() => {
-          // Compute validity to enable/disable button, giving clearer UX
-          const slAbsV = slInput ? computeAbs(slInput, true) : 0
-          const tpAbsV = tpInput ? computeAbs(tpInput, false) : 0
-          const slOk = slAbsV === 0 || (slAbsV !== null && toScaledAbs(slAbsV) !== null)
-          const tpOk = tpAbsV === 0 || (tpAbsV !== null && toScaledAbs(tpAbsV) !== null)
-          const disabled = !perpsAddress || isPending || mining || !slOk || !tpOk
-          return <button className="btn" disabled={disabled} onClick={onSet}>Setear</button>
-        })()}
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div className="grid gap-6">
+          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'SL % (ej 60.10)' : 'SL abs (ej 995.5)') : (market==='btcd' ? 'SL Δ% (ej -1.0)' : 'SL Δ (ej -5)')} value={slInput} onChange={e=>setSlInput(e.target.value)} />
+          {(() => {
+            const slAbsV = slInput ? computeAbs(slInput, true) : 0
+            const slOk = slAbsV === 0 || (slAbsV !== null && toScaledAbs(slAbsV) !== null)
+            const disabled = !perpsAddress || isPending || mining || !slOk
+            return <button className="btn" disabled={disabled} onClick={onSetSL}>Setear SL</button>
+          })()}
+        </div>
+        <div className="grid gap-6">
+          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'TP % (ej 61.20)' : 'TP abs (ej 1002.0)') : (market==='btcd' ? 'TP Δ% (ej +1.5)' : 'TP Δ (ej +8)')} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
+          {(() => {
+            const tpAbsV = tpInput ? computeAbs(tpInput, false) : 0
+            const tpOk = tpAbsV === 0 || (tpAbsV !== null && toScaledAbs(tpAbsV) !== null)
+            const disabled = !perpsAddress || isPending || mining || !tpOk
+            return <button className="btn" disabled={disabled} onClick={onSetTP}>Setear TP</button>
+          })()}
+        </div>
       </div>
       <div className="muted small">
         {mode==='relative' ? (
@@ -1008,7 +1041,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
         )}
       </div>
       {/* Button removed visually to save space: 'Cerrar por stop ahora' */}
-      {error && <div className="error">{String(error)}</div>}
+      {error && <HoverInfo label="Error" tip={String(error)} />}
       {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
     </div>
   )

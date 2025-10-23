@@ -586,7 +586,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                 minHeight: 28
               }}>
                 {Array.isArray(randomEvents) && randomEvents.length > 0 ? (
-                  randomEvents.slice(0, 8).map((r, idx) => {
+                  randomEvents.slice(0, 10).map((r, idx) => {
                     const prev = randomEvents[idx+1]?.value
                     const stepBps = (typeof prev === 'number' && prev > 0)
                       ? Math.round(((Number(r.value) - prev) / prev) * 10000)
@@ -1578,9 +1578,9 @@ function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'ba
           <div className="muted">{t('random_none')}</div>
         ) : (
           <div className="list">
-            {items.slice(0, 8).map((r, idx)=>{
+            {items.slice(0, 10).map((r, idx)=>{
               // Compute step in bps versus the immediately older value (same data as chart)
-              const prev = items.slice(0, 8)[idx+1]?.value
+              const prev = items.slice(0, 10)[idx+1]?.value
               const stepBps = (typeof prev === 'number' && prev > 0)
                 ? Math.round(((r.value - prev) / prev) * 10000)
                 : null

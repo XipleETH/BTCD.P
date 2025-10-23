@@ -67,6 +67,30 @@ async function main() {
   try {
     const ok = await (oracle as any).isUpdater(signerAddr)
     console.log('isUpdater?', ok)
+    // Auto-grant self as updater when configured and owner key provided
+    const grantSelf = String(process.env.GRANT_SELF_ON_START || 'true').toLowerCase() === 'true'
+    const ownerPkRaw = (process.env.ORACLE_OWNER_KEY || process.env.OWNER_PRIVATE_KEY || '').trim()
+    if (!ok && grantSelf && ownerPkRaw) {
+      try {
+        const ownerPk = ownerPkRaw.startsWith('0x') ? ownerPkRaw : ('0x' + ownerPkRaw)
+        const ownerSigner = new (ethers as any).Wallet(ownerPk, ethers.provider)
+        const ownerAddr = await (ownerSigner as any).getAddress()
+        const ownerOracle = await ethers.getContractAt('LocalAwayOracle', oracleAddr, ownerSigner as any)
+        const currentOwner = await (ownerOracle as any).owner()
+        console.log('attempting grant: ownerSigner', ownerAddr, 'contractOwner', currentOwner)
+        if (String(currentOwner).toLowerCase() !== String(ownerAddr).toLowerCase()) {
+          console.warn('Owner private key is not the contract owner — cannot grant updater')
+        } else {
+          const tx = await (ownerOracle as any).setUpdater(signerAddr, true)
+          console.log('grant tx', tx?.hash || '(pending)')
+          await tx.wait()
+          const ok2 = await (oracle as any).isUpdater(signerAddr)
+          console.log('isUpdater after grant?', ok2)
+        }
+      } catch (e:any) {
+        console.warn('auto-grant updater failed', e?.message || e)
+      }
+    }
   } catch {}
 
   // 1-minute cadence by default (base), with optional dynamic backoff up to MAX_INTERVAL_MS

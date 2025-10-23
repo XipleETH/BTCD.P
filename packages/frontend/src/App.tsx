@@ -1151,6 +1151,7 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
         <div><strong>Saldo:</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
         <div className="row">
           <input className="input" placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
+          <button className="btn" onClick={onFund} disabled={!perpsAddress || isPending || !amt.trim()} style={{ marginLeft: 8 }}>Depositar al tesoro</button>
         </div>
         {localErr && <div className="error">{localErr}</div>}
         {error && <div className="error">{String(error)}</div>}

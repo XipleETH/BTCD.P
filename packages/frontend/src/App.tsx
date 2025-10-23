@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useContext, createContext } from 'react'
 import { http, WagmiProvider, useSwitchChain, useAccount } from 'wagmi'
 import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
@@ -6,6 +6,189 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
 import './styles.css'
 import { deployed } from './addresses'
+
+// ---- Minimal i18n (ES default, EN optional) ----
+type Lang = 'es' | 'en'
+const translations: Record<Lang, Record<string, string>> = {
+  es: {
+    ui_network_live: 'Perps en Vivo',
+    ui_network_test: 'Perps de Prueba',
+    chart_loading_events: 'Cargando eventos…',
+    chart_showing_last: 'Mostrando últimos registrados',
+    chart_no_events: 'Sin eventos recientes',
+    chart_loading_numbers: 'Cargando números…',
+    chart_no_numbers: 'Sin números recientes',
+    chart_drag_here: 'Arrastra aquí para desplazar la página',
+
+    open_title: 'Abrir posición',
+    open_fee_open: 'Fee: 0.10% al abrir',
+    open_has_pos: 'Ya tienes una posición abierta. Debes cerrarla antes de abrir otra.',
+    open_invalid_amount: 'Monto inválido (usa punto como separador decimal).',
+    open_open: 'Abrir',
+
+    common_sim_failed: 'Simulación falló',
+    common_error: 'Error',
+    common_sending_tx: 'Enviando transacción...',
+    common_copy: 'Copiar',
+
+    mypos_connect_wallet: 'Conecta tu wallet.',
+    mypos_set_perps_address: 'Configura la dirección de Perps.',
+    mypos_loading: 'Cargando…',
+    mypos_no_position: 'No tienes una posición abierta.',
+    mypos_side: 'Lado',
+    mypos_entry: 'Entrada',
+    mypos_price: 'Precio',
+    mypos_margin: 'Margen',
+    mypos_notional: 'Notional',
+    mypos_mm_ratio: 'MM Ratio',
+    mypos_maintenance: 'Mantenimiento',
+    mypos_pnl: 'PnL',
+    mypos_equity: 'Equity',
+
+    close_title: 'Cerrar posición',
+    close_fee_close: 'Fee: 0.10% al cerrar',
+    close_insuff_treasury: 'El contrato no tiene saldo suficiente para pagarte el cierre estimado. Fondea en Config o espera a que el PnL sea menor.',
+    close_no_pos_to_close: 'No tienes una posición abierta para cerrar.',
+    close_close: 'Cerrar',
+
+    stops_title: 'Stops (SL / TP)',
+    stops_current_sl: 'SL actual',
+    stops_current_tp: 'TP actual',
+    stops_abs_percent: 'Absoluto (%)',
+    stops_abs_index: 'Absoluto (índice)',
+    stops_rel_percent: 'Relativo (Δ%)',
+    stops_rel_index: 'Relativo (Δ índice)',
+    stops_sl_abs_percent_ph: 'SL % (ej 60.10)',
+    stops_sl_abs_index_ph: 'SL abs (ej 995.5)',
+    stops_sl_rel_percent_ph: 'SL Δ% (ej -1.0)',
+    stops_sl_rel_index_ph: 'SL Δ (ej -5)',
+    stops_tp_abs_percent_ph: 'TP % (ej 61.20)',
+    stops_tp_abs_index_ph: 'TP abs (ej 1002.0)',
+    stops_tp_rel_percent_ph: 'TP Δ% (ej +1.5)',
+    stops_tp_rel_index_ph: 'TP Δ (ej +8)',
+    stops_set_sl: 'Setear SL',
+    stops_set_tp: 'Setear TP',
+    stops_previews_label: 'Previews →',
+    stops_open_to_use_relative: 'Abre una posición para usar relativo',
+    stops_use_abs_btc: 'Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10',
+    stops_use_abs_index: 'Usa valores absolutos del índice (>0)',
+
+    liq_title: 'Liquidación',
+    liq_can_liquidate_q: '¿Puede liquidarse?',
+    liq_btn: 'Liquidar mi posición',
+    liq_sim_failed_prefix: 'Simulación falló:',
+
+    treasury_title: 'Treasury',
+    treasury_balance: 'Saldo:',
+    treasury_deposit: 'Depositar al tesoro',
+    invalid_contract_address: 'Dirección de contrato inválida.',
+
+    trade_fees: 'Fees: 0.10% al abrir y 0.10% al cerrar',
+    trade_price_btcd: 'Precio BTC.D (oráculo)',
+    trade_price_random: 'Precio Random (oráculo)',
+    trade_price_localaway: 'Home/Away Index (oráculo)',
+
+    pos_title: 'Mi posición',
+
+    goals_title: 'Eventos (recientes)',
+    goals_none: 'No hay eventos recientes.',
+    goals_side_home: 'local',
+    goals_side_away: 'visitante',
+
+    random_title: 'Números aleatorios (recientes)',
+    random_none: 'No hay números recientes.',
+  },
+  en: {
+    ui_network_live: 'Live Perps',
+    ui_network_test: 'Test Perps',
+    chart_loading_events: 'Loading events…',
+    chart_showing_last: 'Showing last recorded',
+    chart_no_events: 'No recent events',
+    chart_loading_numbers: 'Loading numbers…',
+    chart_no_numbers: 'No recent numbers',
+    chart_drag_here: 'Drag here to scroll the page',
+
+    open_title: 'Open position',
+    open_fee_open: 'Fee: 0.10% on open',
+    open_has_pos: 'You already have an open position. Close it before opening another.',
+    open_invalid_amount: 'Invalid amount (use dot as decimal separator).',
+    open_open: 'Open',
+
+    common_sim_failed: 'Simulation failed',
+    common_error: 'Error',
+    common_sending_tx: 'Sending transaction...',
+    common_copy: 'Copy',
+
+    mypos_connect_wallet: 'Connect your wallet.',
+    mypos_set_perps_address: 'Set the Perps address.',
+    mypos_loading: 'Loading…',
+    mypos_no_position: 'You have no open position.',
+    mypos_side: 'Side',
+    mypos_entry: 'Entry',
+    mypos_price: 'Price',
+    mypos_margin: 'Margin',
+    mypos_notional: 'Notional',
+    mypos_mm_ratio: 'MM Ratio',
+    mypos_maintenance: 'Maintenance',
+    mypos_pnl: 'PnL',
+    mypos_equity: 'Equity',
+
+    close_title: 'Close position',
+    close_fee_close: 'Fee: 0.10% on close',
+    close_insuff_treasury: "The contract treasury doesn't have enough balance to pay the estimated close. Fund it in Config or wait until PnL is lower.",
+    close_no_pos_to_close: 'You have no open position to close.',
+    close_close: 'Close',
+
+    stops_title: 'Stops (SL / TP)',
+    stops_current_sl: 'Current SL',
+    stops_current_tp: 'Current TP',
+    stops_abs_percent: 'Absolute (%)',
+    stops_abs_index: 'Absolute (index)',
+    stops_rel_percent: 'Relative (Δ%)',
+    stops_rel_index: 'Relative (Δ index)',
+    stops_sl_abs_percent_ph: 'SL % (e.g. 60.10)',
+    stops_sl_abs_index_ph: 'SL abs (e.g. 995.5)',
+    stops_sl_rel_percent_ph: 'SL Δ% (e.g. -1.0)',
+    stops_sl_rel_index_ph: 'SL Δ (e.g. -5)',
+    stops_tp_abs_percent_ph: 'TP % (e.g. 61.20)',
+    stops_tp_abs_index_ph: 'TP abs (e.g. 1002.0)',
+    stops_tp_rel_percent_ph: 'TP Δ% (e.g. +1.5)',
+    stops_tp_rel_index_ph: 'TP Δ (e.g. +8)',
+    stops_set_sl: 'Set SL',
+    stops_set_tp: 'Set TP',
+    stops_previews_label: 'Previews →',
+    stops_open_to_use_relative: 'Open a position to use relative mode',
+    stops_use_abs_btc: 'Use absolute values of the BTC.D index (0–100%), e.g. 60.10',
+    stops_use_abs_index: 'Use absolute index values (>0)',
+
+    liq_title: 'Liquidation',
+    liq_can_liquidate_q: 'Can be liquidated?',
+    liq_btn: 'Liquidate my position',
+    liq_sim_failed_prefix: 'Simulation failed:',
+
+    treasury_title: 'Treasury',
+    treasury_balance: 'Balance:',
+    treasury_deposit: 'Deposit to treasury',
+    invalid_contract_address: 'Invalid contract address.',
+
+    trade_fees: 'Fees: 0.10% to open and 0.10% to close',
+    trade_price_btcd: 'BTC.D price (oracle)',
+    trade_price_random: 'Random price (oracle)',
+    trade_price_localaway: 'Home/Away index (oracle)',
+
+    pos_title: 'My position',
+
+    goals_title: 'Events (recent)',
+    goals_none: 'No recent events.',
+    goals_side_home: 'home',
+    goals_side_away: 'away',
+
+    random_title: 'Random numbers (recent)',
+    random_none: 'No recent numbers.',
+  }
+}
+const I18nContext = createContext<{ lang: Lang; t: (k: string) => string }>({ lang: 'es', t: (k)=> translations.es[k] || k })
+function useI18n() { return useContext(I18nContext) }
 
 // Oracle event ABI for on-chain history and live updates
 const oracleEventAbi = [
@@ -95,6 +278,7 @@ function normalizeContinuity(cs: Candle[]): Candle[] {
 }
 
 function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
+  const { t, lang } = useI18n()
   const [tf, setTf] = useState<'1m'|'5m'|'15m'|'1h'|'4h'|'1d'|'3d'|'1w'>('15m')
   const [candles, setCandles] = useState<Candle[]>([])
   const [remaining, setRemaining] = useState<number>(0)
@@ -454,7 +638,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                     const inferredSport = String(e.meta?.sport || (String(e.meta?.type||'').toLowerCase()==='goal' ? 'football' : ''))
                     const emoji = (e.meta?.emoji && String(e.meta?.emoji).length>0) ? e.meta.emoji : sportEmoji(inferredSport)
                     const type = String(e.meta?.type || '')
-                    const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
+                    const side = type === 'goal' ? (e.meta?.side === 'home' ? t('goals_side_home') : (e.meta?.side === 'away' ? t('goals_side_away') : '')) : ''
                     return (
                       <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
                         <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
@@ -468,7 +652,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                   })
                 ) : (
                   <div className="muted small" style={{ opacity:0.8 }}>
-                    {bannerLoading ? 'Cargando eventos…' : (bannerHadCache ? 'Mostrando últimos registrados' : 'Sin eventos recientes')}
+                    {bannerLoading ? t('chart_loading_events') : (bannerHadCache ? t('chart_showing_last') : t('chart_no_events'))}
                   </div>
                 )}
               </div>
@@ -512,7 +696,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
                   })
                 ) : (
                   <div className="muted small" style={{ opacity:0.8 }}>
-                    {randLoading ? 'Cargando números…' : (randHadCache ? 'Mostrando últimos registrados' : 'Sin números recientes')}
+                    {randLoading ? t('chart_loading_numbers') : (randHadCache ? t('chart_showing_last') : t('chart_no_numbers'))}
                   </div>
                 )}
               </div>
@@ -520,10 +704,10 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
           )}
           <div id={containerId} className="chart" />
           {/* Scroll guards around the chart to ease page scrolling */}
-          <div className="chart-guard top" title="Arrastra aquí para desplazar la página" />
-          <div className="chart-guard bottom" title="Arrastra aquí para desplazar la página" />
-          <div className="chart-guard left" title="Arrastra aquí para desplazar la página" />
-          <div className="chart-guard right" title="Arrastra aquí para desplazar la página" />
+          <div className="chart-guard top" title={t('chart_drag_here')} />
+          <div className="chart-guard bottom" title={t('chart_drag_here')} />
+          <div className="chart-guard left" title={t('chart_drag_here')} />
+          <div className="chart-guard right" title={t('chart_drag_here')} />
           <div style={{ position:'absolute', top: overlayTop, right: 6, background:'#fff', color:'#111', border:'1px solid #d1d5db', boxShadow:'0 1px 3px rgba(0,0,0,0.25)', padding:'4px 8px', borderRadius:4, fontSize:12, lineHeight:1.15, fontWeight:600, minWidth:64, textAlign:'right' }}>
             <div>
               {(() => {
@@ -567,6 +751,13 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' })
 }
 
 function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
+  const [lang, setLang] = useState<Lang>(() => {
+    try { return (localStorage.getItem('btcd:ui:lang') as Lang) === 'en' ? 'en' : 'es' } catch { return 'es' }
+  })
+  const t = (k: string) => (translations[lang]?.[k] ?? translations.es[k] ?? k)
+  useEffect(() => {
+    try { document.documentElement.lang = lang } catch {}
+  }, [lang])
   // Wallet and chain management
   const chainId = useChainId()
   const { isConnected } = useAccount()
@@ -595,6 +786,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
   }, [chain, market])
 
   return (
+    <I18nContext.Provider value={{ lang, t }}>
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
         <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
@@ -612,7 +804,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
                       try { await switchChainAsync?.({ chainId: base.id }) } catch {}
                     }
                   }}
-                >Live Perps</button>
+                >{t('ui_network_live')}</button>
                 <button
                   className={(chain==='baseSepolia' ? 'seg active' : 'seg')}
                   onClick={async ()=>{
@@ -622,7 +814,14 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
                       try { await switchChainAsync?.({ chainId: baseSepolia.id }) } catch {}
                     }
                   }}
-                >Test Perps</button>
+                >{t('ui_network_test')}</button>
+              </div>
+            </div>
+            {/* Language toggle */}
+            <div className="network-menu" style={{ marginLeft: 8 }}>
+              <div className="segmented">
+                <button className={lang==='es' ? 'seg active':'seg'} onClick={()=>{ setLang('es'); try{localStorage.setItem('btcd:ui:lang','es')}catch{} }}>ES</button>
+                <button className={lang==='en' ? 'seg active':'seg'} onClick={()=>{ setLang('en'); try{localStorage.setItem('btcd:ui:lang','en')}catch{} }}>EN</button>
               </div>
             </div>
           </div>
@@ -662,14 +861,16 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
         </section>
       </main>
     </div>
+    </I18nContext.Provider>
   )
 }
 
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
 import { parseEther, formatUnits, formatEther, createPublicClient, http as viemHttp } from 'viem'
 
 type OpenControlled = { isLong: boolean; setIsLong: (v:boolean)=>void; leverage: number; setLeverage: (n:number)=>void; marginEth: string; setMarginEth: (s:string)=>void }
 function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', compact?: boolean, controlled?: OpenControlled }) {
+  const { t } = useI18n()
   const { address } = useAccount()
   const [isLongLocal, setIsLongLocal] = useState(true)
   const [leverageLocal, setLeverageLocal] = useState(10)
@@ -716,7 +917,7 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
     <div className={!compact ? 'card' : ''}>
       {!compact && (
         <>
-          <div className="card-header"><h3>Abrir posición</h3><span className="muted">Fee: 0.10% al abrir</span></div>
+          <div className="card-header"><h3>{t('open_title')}</h3><span className="muted">{t('open_fee_open')}</span></div>
           <div className="card-body grid gap-8">
             <div className="row" style={{ gap: 8 }}>
               <button className={'btn long-btn' + (isLong ? ' active' : '')} onClick={()=>setIsLong(true)}>Long</button>
@@ -730,14 +931,14 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
               <label>Margin (ETH)</label>
               <input className="input" value={marginEth} onChange={e=>setMarginEth(e.target.value)} />
             </div>
-            {hasPos && <div className="warn">Ya tienes una posición abierta. Debes cerrarla antes de abrir otra.</div>}
+            {hasPos && <div className="warn">{t('open_has_pos')}</div>}
           </div>
         </>
       )}
       <button className="btn primary w-full" disabled={!address || !perpsAddress || isPending || mining || hasPos} onClick={async ()=>{
         setLocalError('')
         const value = safeParseEther(marginEth)
-        if (value === null) { setLocalError('Monto inválido (usa punto como separador decimal).'); return }
+        if (value === null) { setLocalError(t('open_invalid_amount')); return }
         try {
           if (simOpen.data?.request) {
             await writeContract(simOpen.data.request as any)
@@ -755,17 +956,18 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
         } catch (e: any) {
           setLocalError(e?.shortMessage || e?.message || String(e))
         }
-      }}>Abrir</button>
+      }}>{t('open_open')}</button>
       {/* Mensajes de simulación en hover */}
-      {simOpen.error && <HoverInfo label="Simulación falló" tip={String((simOpen.error as any)?.shortMessage || simOpen.error.message)} />}
-      {localError && <HoverInfo label="Error" tip={localError} />}
-      {error && <HoverInfo label="Error" tip={String(error)} />}
-      {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
+      {simOpen.error && <HoverInfo label={t('common_sim_failed')} tip={String((simOpen.error as any)?.shortMessage || simOpen.error.message)} />} 
+      {localError && <HoverInfo label={t('common_error')} tip={localError} />}
+      {error && <HoverInfo label={t('common_error')} tip={String(error)} />}
+      {(isPending || mining) && <div className="muted mt-8">{t('common_sending_tx')}</div>}
     </div>
   )
 }
 
 function MyPosition({ perpsAddress, oracleAddress, market, chainKey }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway', chainKey: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: pos } = useReadContract({
@@ -791,12 +993,12 @@ function MyPosition({ perpsAddress, oracleAddress, market, chainKey }: { perpsAd
     query: { enabled: Boolean(perpsAddress) }
   })
 
-  if (!address) return <div className="muted">Conecta tu wallet.</div>
-  if (!perpsAddress) return <div className="muted">Configura la dirección de Perps.</div>
-  if (!pos) return <div className="muted">Cargando…</div>
+  if (!address) return <div className="muted">{t('mypos_connect_wallet')}</div>
+  if (!perpsAddress) return <div className="muted">{t('mypos_set_perps_address')}</div>
+  if (!pos) return <div className="muted">{t('mypos_loading')}</div>
 
   const [isOpen, isLong, leverage, margin, entryPrice] = pos as [boolean, boolean, bigint, bigint, bigint]
-  if (!isOpen) return <div className="muted">No tienes una posición abierta.</div>
+  if (!isOpen) return <div className="muted">{t('mypos_no_position')}</div>
 
   const price = typeof priceRaw === 'bigint' ? priceRaw : 0n
   const notional = margin * leverage
@@ -824,21 +1026,22 @@ function MyPosition({ perpsAddress, oracleAddress, market, chainKey }: { perpsAd
 
   return (
     <div className="stats-grid">
-      <div className="stat"><span className="stat-label">Lado</span><span className={isLong ? 'badge long':'badge short'}>{isLong ? 'Long' : 'Short'}</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_side')}</span><span className={isLong ? 'badge long':'badge short'}>{isLong ? 'Long' : 'Short'}</span></div>
       <div className="stat"><span className="stat-label">Leverage</span><span className="stat-value">x{String(leverage)}</span></div>
-  <div className="stat"><span className="stat-label">Entrada</span><span className="stat-value">{entryPct.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
-  <div className="stat"><span className="stat-label">Precio</span><span className="stat-value">{pctIndex.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
-      <div className="stat"><span className="stat-label">Margen</span><span className="stat-value">{marginEth.toFixed(6)} ETH</span></div>
-      <div className="stat"><span className="stat-label">Notional</span><span className="stat-value">{notionalEth.toFixed(6)} ETH</span></div>
-      <div className="stat"><span className="stat-label">MM Ratio</span><span className="stat-value">{mmRatio/100}%</span></div>
-      <div className="stat"><span className="stat-label">Mantenimiento</span><span className="stat-value">{maintenanceEth.toFixed(6)} ETH</span></div>
-      <div className="stat span-2"><span className="stat-label">PnL</span><span className={pnlEth >= 0 ? 'pnl up':'pnl down'}>{pnlEth.toFixed(6)} ETH ({roi.toFixed(2)}%)</span></div>
-      <div className="stat span-2"><span className="stat-label">Equity</span><span className="stat-value">{equityEth.toFixed(6)} ETH</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_entry')}</span><span className="stat-value">{entryPct.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_price')}</span><span className="stat-value">{pctIndex.toFixed(4)}{market==='btcd' ? '%' : ''}</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_margin')}</span><span className="stat-value">{marginEth.toFixed(6)} ETH</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_notional')}</span><span className="stat-value">{notionalEth.toFixed(6)} ETH</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_mm_ratio')}</span><span className="stat-value">{mmRatio/100}%</span></div>
+      <div className="stat"><span className="stat-label">{t('mypos_maintenance')}</span><span className="stat-value">{maintenanceEth.toFixed(6)} ETH</span></div>
+      <div className="stat span-2"><span className="stat-label">{t('mypos_pnl')}</span><span className={pnlEth >= 0 ? 'pnl up':'pnl down'}>{pnlEth.toFixed(6)} ETH ({roi.toFixed(2)}%)</span></div>
+      <div className="stat span-2"><span className="stat-label">{t('mypos_equity')}</span><span className="stat-value">{equityEth.toFixed(6)} ETH</span></div>
     </div>
   )
 }
 
 function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', minimal?: boolean }) {
+  const { t } = useI18n()
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
@@ -893,10 +1096,10 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
   return (
     <div className={minimal ? '' : 'card'}>
       {!minimal && (
-        <div className="card-header"><h3>Cerrar posición</h3><span className="muted">Fee: 0.10% al cerrar</span></div>
+        <div className="card-header"><h3>{t('close_title')}</h3><span className="muted">{t('close_fee_close')}</span></div>
       )}
-      {!minimal && insufficientTreasury && <div className="error">El contrato no tiene saldo suficiente para pagarte el cierre estimado. Fondea en Config o espera a que el PnL sea menor.</div>}
-      {!minimal && !hasPos && <div className="warn">No tienes una posición abierta para cerrar.</div>}
+      {!minimal && insufficientTreasury && <div className="error">{t('close_insuff_treasury')}</div>}
+      {!minimal && !hasPos && <div className="warn">{t('close_no_pos_to_close')}</div>}
       <button className="btn danger w-full" disabled={!perpsAddress || isPending || mining || !hasPos || insufficientTreasury} onClick={async ()=>{
         try {
           if (simClose.data?.request) {
@@ -912,14 +1115,15 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
             })
           }
         } catch {}
-      }}>Cerrar</button>
+      }}>{t('close_close')}</button>
       {/* Ocultamos mensajes debajo de Cerrar para no ensuciar la UI */}
-      {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
+      {(isPending || mining) && <div className="muted mt-8">{t('common_sending_tx')}</div>}
     </div>
   )
 }
 
 function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway', compact?: boolean }) {
+  const { t } = useI18n()
   const { address } = useAccount()
   const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
   const { data: pos } = useReadContract({
@@ -1050,29 +1254,29 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
   const inner = (
     <div className="grid gap-8">
       {/* Encabezado y valores actuales arriba de inputs */}
-      <div style={{ fontWeight: 700, fontSize: 14 }}>Stops (SL / TP)</div>
-      <div className="muted small">SL actual: {stopLoss ? (market==='btcd' ? (Number(stopLoss)/1e8).toFixed(4)+'%' : (Number(stopLoss)/1e8).toFixed(4)) : '—'} | TP actual: {takeProfit ? (market==='btcd' ? (Number(takeProfit)/1e8).toFixed(4)+'%' : (Number(takeProfit)/1e8).toFixed(4)) : '—'}</div>
+      <div style={{ fontWeight: 700, fontSize: 14 }}>{t('stops_title')}</div>
+      <div className="muted small">{t('stops_current_sl')}: {stopLoss ? (market==='btcd' ? (Number(stopLoss)/1e8).toFixed(4)+'%' : (Number(stopLoss)/1e8).toFixed(4)) : '—'} | {t('stops_current_tp')}: {takeProfit ? (market==='btcd' ? (Number(takeProfit)/1e8).toFixed(4)+'%' : (Number(takeProfit)/1e8).toFixed(4)) : '—'}</div>
       <div className="segmented">
-        <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>{market==='btcd' ? 'Absoluto (%)' : 'Absoluto (índice)'}</button>
-        <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>{market==='btcd' ? 'Relativo (Δ%)' : 'Relativo (Δ índice)'}</button>
+        <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>{market==='btcd' ? t('stops_abs_percent') : t('stops_abs_index')}</button>
+        <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>{market==='btcd' ? t('stops_rel_percent') : t('stops_rel_index')}</button>
       </div>
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div className="grid gap-6">
-          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'SL % (ej 60.10)' : 'SL abs (ej 995.5)') : (market==='btcd' ? 'SL Δ% (ej -1.0)' : 'SL Δ (ej -5)')} value={slInput} onChange={e=>setSlInput(e.target.value)} />
+          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? t('stops_sl_abs_percent_ph') : t('stops_sl_abs_index_ph')) : (market==='btcd' ? t('stops_sl_rel_percent_ph') : t('stops_sl_rel_index_ph'))} value={slInput} onChange={e=>setSlInput(e.target.value)} />
           {(() => {
             const slAbsV = slInput ? computeAbs(slInput, true) : 0
             const slOk = slAbsV === 0 || (slAbsV !== null && toScaledAbs(slAbsV) !== null)
             const disabled = !perpsAddress || isPending || mining || !slOk || !hasPos
-            return <button className="btn" disabled={disabled} onClick={onSetSL}>Setear SL</button>
+            return <button className="btn" disabled={disabled} onClick={onSetSL}>{t('stops_set_sl')}</button>
           })()}
         </div>
         <div className="grid gap-6">
-          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? 'TP % (ej 61.20)' : 'TP abs (ej 1002.0)') : (market==='btcd' ? 'TP Δ% (ej +1.5)' : 'TP Δ (ej +8)')} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
+          <input className="input" placeholder={mode==='absolute' ? (market==='btcd' ? t('stops_tp_abs_percent_ph') : t('stops_tp_abs_index_ph')) : (market==='btcd' ? t('stops_tp_rel_percent_ph') : t('stops_tp_rel_index_ph'))} value={tpInput} onChange={e=>setTpInput(e.target.value)} />
           {(() => {
             const tpAbsV = tpInput ? computeAbs(tpInput, false) : 0
             const tpOk = tpAbsV === 0 || (tpAbsV !== null && toScaledAbs(tpAbsV) !== null)
             const disabled = !perpsAddress || isPending || mining || !tpOk || !hasPos
-            return <button className="btn" disabled={disabled} onClick={onSetTP}>Setear TP</button>
+            return <button className="btn" disabled={disabled} onClick={onSetTP}>{t('stops_set_tp')}</button>
           })()}
         </div>
       </div>
@@ -1080,31 +1284,32 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
         {mode==='relative' ? (
           <>
             {entryVal !== undefined ? (market==='btcd'
-              ? `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4)+'%' : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4)+'%' : '—'}`
-              : `Previews → SL: ${slPreview!==null ? slPreview.toFixed(4) : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4) : '—'}`)
-              : 'Abre una posición para usar relativo'}
+              ? `${t('stops_previews_label')} SL: ${slPreview!==null ? slPreview.toFixed(4)+'%' : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4)+'%' : '—'}`
+              : `${t('stops_previews_label')} SL: ${slPreview!==null ? slPreview.toFixed(4) : '—'} | TP: ${tpPreview!==null ? tpPreview.toFixed(4) : '—'}`)
+              : t('stops_open_to_use_relative')}
           </>
         ) : (
           <>
-            {market==='btcd' ? 'Usa valores absolutos del índice BTC.D (0–100%), p.ej. 60.10' : 'Usa valores absolutos del índice (>0)'}
+            {market==='btcd' ? t('stops_use_abs_btc') : t('stops_use_abs_index')}
           </>
         )}
       </div>
       {/* Button removed visually to save space: 'Cerrar por stop ahora' */}
-      {error && <HoverInfo label="Error" tip={String(error)} />}
-      {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
+      {error && <HoverInfo label={t('common_error')} tip={String(error)} />}
+      {(isPending || mining) && <div className="muted">{t('common_sending_tx')}</div>}
     </div>
   )
   if (compact) return inner
   return (
     <div className="card">
-      <div className="card-header"><h3>Stops (SL / TP)</h3></div>
+      <div className="card-header"><h3>{t('stops_title')}</h3></div>
       <div className="card-body">{inner}</div>
     </div>
   )
 }
 
 function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   const { address } = useAccount()
   const { data: hash, writeContract, isPending, error } = useWriteContract()
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash })
@@ -1126,7 +1331,7 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
   })
   return (
     <div>
-      <div className="muted mb-8">¿Puede liquidarse? {String(canLiq)}</div>
+      <div className="muted mb-8">{t('liq_can_liquidate_q')} {String(canLiq)}</div>
       <button className="btn danger w-full" disabled={!perpsAddress || !address || isPending || mining || !canLiq} onClick={async ()=>{
         try {
           if (simLiq.data?.request) {
@@ -1142,10 +1347,10 @@ function LiquidateSelf({ perpsAddress, chainKey }: { perpsAddress: string, chain
             })
           }
         } catch {}
-      }}>Liquidar mi posición</button>
-      {simLiq.error && <div className="error">Simulación falló: {String((simLiq.error as any)?.shortMessage || simLiq.error.message)}</div>}
+      }}>{t('liq_btn')}</button>
+      {simLiq.error && <div className="error">{t('liq_sim_failed_prefix')} {String((simLiq.error as any)?.shortMessage || simLiq.error.message)}</div>}
       {error && <div className="error">{String(error)}</div>}
-      {(isPending || mining) && <div className="muted">Enviando transacción...</div>}
+      {(isPending || mining) && <div className="muted">{t('common_sending_tx')}</div>}
     </div>
   )
 }
@@ -1204,6 +1409,7 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 // NetworkHelper removed: the page now follows the wallet network directly via ConnectButton's switch
 
 function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, desired: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   const chain = desired === 'baseSepolia' ? baseSepolia : base
   const { data: bal } = useBalance({ address: (perpsAddress || undefined) as any, chainId: chain.id, query: { enabled: Boolean(perpsAddress) } })
   const [amt, setAmt] = useState('0.1')
@@ -1213,8 +1419,8 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
     try {
       setLocalErr('')
       const val = parseEther((amt || '0').replace(',', '.'))
-      const isAddr = /^0x[0-9a-fA-F]{40}$/.test(perpsAddress)
-      if (!isAddr) { setLocalErr('Dirección de contrato inválida.'); return }
+  const isAddr = /^0x[0-9a-fA-F]{40}$/.test(perpsAddress)
+  if (!isAddr) { setLocalErr(t('invalid_contract_address')); return }
       try {
         await sendTransactionAsync?.({ chainId: chain.id, to: perpsAddress as any, value: val })
       } catch (e: any) {
@@ -1231,12 +1437,12 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
   }
   return (
     <div className="card">
-      <div className="card-header"><h3>Treasury</h3></div>
+      <div className="card-header"><h3>{t('treasury_title')}</h3></div>
       <div className="card-body grid gap-8">
-        <div><strong>Saldo:</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
+        <div><strong>{t('treasury_balance')}</strong> {bal ? `${Number(formatEther(bal.value)).toFixed(6)} ETH` : '—'}</div>
         <div className="row">
           <input className="input" placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
-          <button className="btn" onClick={onFund} disabled={!perpsAddress || isPending || !amt.trim()} style={{ marginLeft: 8 }}>Depositar al tesoro</button>
+          <button className="btn" onClick={onFund} disabled={!perpsAddress || isPending || !amt.trim()} style={{ marginLeft: 8 }}>{t('treasury_deposit')}</button>
         </div>
         {localErr && <div className="error">{localErr}</div>}
         {error && <div className="error">{String(error)}</div>}
@@ -1247,6 +1453,7 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
 
 // Combined, pro-looking panels
 function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAddress: string, oracleAddress: string, chainKey: 'base'|'baseSepolia', market: 'btcd'|'random'|'localaway' }) {
+  const { t } = useI18n()
   const [isLong, setIsLong] = useState(true)
   const [leverage, setLeverage] = useState(10)
   const [marginEth, setMarginEth] = useState('0.1')
@@ -1254,7 +1461,7 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
     <div className="card">
       <div className="card-body grid gap-12">
         <div>
-          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : (market==='random' ? 'Precio Random (oráculo)' : 'Home/Away Index (oráculo)')}</div>
+          <div className="muted small">{market==='btcd' ? t('trade_price_btcd') : (market==='random' ? t('trade_price_random') : t('trade_price_localaway'))}</div>
           <OraclePrice oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -1274,16 +1481,17 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
           <div style={{ width: 8 }} />
           <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chainKey} minimal />
         </div>
-        <div className="muted small">Fees: 0.10% al abrir y 0.10% al cerrar</div>
+        <div className="muted small">{t('trade_fees')}</div>
       </div>
     </div>
   )
 }
 
 function PositionCard({ perpsAddress, oracleAddress, market, chainKey }: { perpsAddress: string, oracleAddress: string, market: 'btcd'|'random'|'localaway', chainKey: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   return (
     <div className="card">
-      <div className="card-header"><h3>Mi posición</h3></div>
+      <div className="card-header"><h3>{t('pos_title')}</h3></div>
       <div className="card-body grid gap-12">
         <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         {/* Mover Stops (SL/TP) aquí para agrupar con Mi posición */}
@@ -1300,9 +1508,10 @@ function OracleCard({ oracleAddress }: { oracleAddress: string }) {
 }
 
 function LiquidationCard({ perpsAddress, chainKey }: { perpsAddress: string, chainKey: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   return (
     <div className="card">
-      <div className="card-header"><h3>Liquidación</h3></div>
+      <div className="card-header"><h3>{t('liq_title')}</h3></div>
       <div className="card-body">
         <LiquidateSelf perpsAddress={perpsAddress} chainKey={chainKey} />
       </div>
@@ -1344,10 +1553,12 @@ function HoverInfo({ label, tip }: { label: string, tip: string }) {
 }
 
 function CopyBtn({ text }: { text: string }) {
-  return <button className="btn sm" onClick={()=>navigator.clipboard?.writeText(text || '')}>Copiar</button>
+  const { t } = useI18n()
+  return <button className="btn sm" onClick={()=>navigator.clipboard?.writeText(text || '')}>{t('common_copy')}</button>
 }
 
 function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+  const { t } = useI18n()
   const [events, setEvents] = useState<Array<{ time:number, value:number, meta:any }>>([])
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
@@ -1419,10 +1630,10 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   // Use shared sportEmoji helper for consistent mapping
   return (
     <div className="card">
-      <div className="card-header"><h3>Eventos (recientes)</h3></div>
+      <div className="card-header"><h3>{t('goals_title')}</h3></div>
       <div className="card-body">
         {!events.length && !loading ? (
-          <div className="muted">No hay eventos recientes.</div>
+          <div className="muted">{t('goals_none')}</div>
         ) : (
           <div className="list">
             {events.map((e, idx) => {
@@ -1440,7 +1651,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               const pct = typeof e.meta?.deltaPct === 'number' ? e.meta.deltaPct : (Number(e.meta?.deltaPct) || 0)
               const pctStr = pct ? `${(pct*100).toFixed(3)}%` : ''
               // label side only for football goal-type
-              const side = type === 'goal' ? (e.meta?.side === 'home' ? 'local' : (e.meta?.side === 'away' ? 'visitante' : '')) : ''
+              const side = type === 'goal' ? (e.meta?.side === 'home' ? t('goals_side_home') : (e.meta?.side === 'away' ? t('goals_side_away') : '')) : ''
               return (
                 <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                   <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
@@ -1466,6 +1677,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
 }
 
 function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia', oracleAddress: string }) {
+  const { t } = useI18n()
   const [items, setItems] = useState<Array<{ time:number, value:number }>>([])
   const [loading, setLoading] = useState(false)
   const chain = chainKey === 'baseSepolia' ? 'base-sepolia' : 'base'
@@ -1528,10 +1740,10 @@ function RandomCard({ chainKey, oracleAddress }: { chainKey: 'base'|'baseSepolia
   }, [url])
   return (
     <div className="card">
-      <div className="card-header"><h3>Números aleatorios (recientes)</h3></div>
+      <div className="card-header"><h3>{t('random_title')}</h3></div>
       <div className="card-body">
         {!items.length && !loading ? (
-          <div className="muted">No hay números recientes.</div>
+          <div className="muted">{t('random_none')}</div>
         ) : (
           <div className="list">
             {items.map((r, idx)=>{

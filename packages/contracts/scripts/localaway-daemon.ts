@@ -311,8 +311,9 @@ async function main() {
                   const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
                   const periods = g?.scores?.periods || g?.periods || {}
                   const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
-                  const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
-                  const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+                  // Count volleyball by summing period points only (ignore set scores)
+                  const totHome = sumSide('home')
+                  const totAway = sumSide('away')
                   let prev = lastVolley.get(id)
                   if (!prev && lastApi && ingestSecret) {
                     try {
@@ -331,7 +332,7 @@ async function main() {
                   const dAway = Math.max(0, totAway - prev.away)
                   if (!dHome && !dAway) { lastVolley.set(id, { home: totHome, away: totAway }); continue }
                   anyActivity = true
-                  const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                  const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
                   const leagueName = g?.league?.name || g?.country?.name || 'League'
                   const hName = g?.teams?.home?.name || 'Home'
@@ -393,7 +394,7 @@ async function main() {
                   const dAway = Math.max(0, totAway - prev.away)
                   if (!dHome && !dAway) { lastBasket.set(id, { home: totHome, away: totAway }); continue }
                   anyActivity = true
-                  const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                  const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
                   const leagueName = g?.league?.name || g?.country?.name || 'League'
                   const hName = g?.teams?.home?.name || 'Home'
@@ -568,7 +569,7 @@ async function main() {
                     const dAway = Math.max(0, totAway - prev.away)
                     console.log(new Date().toISOString(), `[BASKET][LEGACY] ${leagueName} ΔH:${dHome} ΔA:${dAway}`)
                     if (dHome || dAway) {
-                      const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                      const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                       currentIndex = Math.max(1, currentIndex * (1 + netPct))
                       const scaled = toScaled(currentIndex)
                       try {
@@ -615,8 +616,8 @@ async function main() {
                     const leagueName = g?.league?.name || g?.country?.name || 'League'
                     const periods = g?.scores?.periods || g?.periods || {}
                     const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
-                    const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
-                    const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+                    const totHome = sumSide('home')
+                    const totAway = sumSide('away')
                     let prev = lastVolley.get(id)
                     if (!prev && lastApi && ingestSecret) {
                       try {
@@ -635,7 +636,7 @@ async function main() {
                     const dAway = Math.max(0, totAway - prev.away)
                     console.log(new Date().toISOString(), `[VOLLEY][LEGACY] ${leagueName} ΔH:${dHome} ΔA:${dAway}`)
                     if (dHome || dAway) {
-                      const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+                      const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                       currentIndex = Math.max(1, currentIndex * (1 + netPct))
                       const scaled = toScaled(currentIndex)
                       try {
@@ -808,7 +809,7 @@ async function main() {
 
   const headers = apiKey ? { 'x-apisports-key': apiKey, 'accept':'application/json' } : undefined
 
-      // BASKETBALL: 0.001% per point (home +, away -), one tx per game
+  // BASKETBALL: 0.01% per point (home +, away -), one tx per game
   if (processBasket && apiKey) {
         try {
           const url = new URL('https://v1.basketball.api-sports.io/games')
@@ -841,7 +842,7 @@ async function main() {
             const dHome = Math.max(0, totHome - prev.home)
             const dAway = Math.max(0, totAway - prev.away)
             if (dHome === 0 && dAway === 0) { lastBasket.set(id, { home: totHome, away: totAway }); continue }
-            const netPct = (dHome * 0.00001) - (dAway * 0.00001) // 0.001% = 0.00001 fraction
+            const netPct = (dHome * 0.0001) - (dAway * 0.0001) // 0.01% = 0.0001 fraction
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
             const push = await preflightAndPush(currentIndex, 'basketball')
             if (push.ok && push.hash) {
@@ -866,7 +867,7 @@ async function main() {
         } catch (e:any) { console.warn('basketball fetch failed', e?.message || e) }
   }
 
-      // VOLLEYBALL: 0.001% per point
+  // VOLLEYBALL: 0.01% per point; count period points only
   if (processVolley && apiKey) {
         try {
           const url = new URL('https://v1.volleyball.api-sports.io/games')
@@ -878,8 +879,8 @@ async function main() {
             const leagueName = g?.league?.name || g?.country?.name || 'League'
             const periods = g?.scores?.periods || g?.periods || {}
             const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
-            const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
-            const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+            const totHome = sumSide('home')
+            const totAway = sumSide('away')
             let prev = lastVolley.get(id)
             if (!prev && lastApi && ingestSecret) {
               try {
@@ -897,7 +898,7 @@ async function main() {
             const dHome = Math.max(0, totHome - prev.home)
             const dAway = Math.max(0, totAway - prev.away)
             if (dHome === 0 && dAway === 0) { lastVolley.set(id, { home: totHome, away: totAway }); continue }
-            const netPct = (dHome * 0.00001) - (dAway * 0.00001)
+            const netPct = (dHome * 0.0001) - (dAway * 0.0001)
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
             const push = await preflightAndPush(currentIndex, 'volleyball')
             if (push.ok && push.hash) {

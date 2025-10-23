@@ -150,10 +150,10 @@ export default async function handler(req: Request): Promise<Response> {
     // LocalAway fallback: if nothing in Redis and sticky failed, optionally query an upstream sports-live API
     if (market === 'localaway') {
       try {
-        const base = (process.env.API_BASE || process.env.SPORTS_LIVE_BASE || '').trim()
+        const base = (process.env.API_BASE || process.env.SPORTS_LIVE_BASE || 'https://perp-it.xyz/api/sports-live').trim()
         if (base && base.startsWith('http')) {
           const sep = base.includes('?') ? '&' : '?'
-          const url = `${base}${sep}chain=${encodeURIComponent(chain)}&limit=${limit}`
+          const url = `${base}${sep}chain=${encodeURIComponent(chain)}&market=localaway&limit=${limit}`
           const res = await fetch(url, { cache: 'no-store' })
           if (res.ok) {
             const j = await res.json()

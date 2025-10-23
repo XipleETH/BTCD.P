@@ -549,9 +549,16 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       seriesRef.current = null
       while (el.firstChild) el.removeChild(el.firstChild)
     } catch {}
+    const calcHeight = () => {
+      const w = el.clientWidth || 480
+      // responsive: taller on desktop, smaller on mobile
+      if (w <= 420) return Math.max(240, Math.floor(w * 0.9))
+      if (w <= 640) return Math.max(280, Math.floor(w * 0.7))
+      return 480
+    }
     const chart = createChart(el, {
       width: el.clientWidth,
-      height: 480,
+      height: calcHeight(),
       layout: { background: { type: ColorType.Solid, color: '#0b1221' }, textColor: '#DDD' },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
@@ -564,7 +571,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
         : { upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' }
     )
     seriesRef.current = series as any
-    const onResize = () => chart.applyOptions({ width: el.clientWidth })
+    const onResize = () => chart.applyOptions({ width: el.clientWidth, height: calcHeight() })
     window.addEventListener('resize', onResize)
     return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = null }
   }, [market])
@@ -752,7 +759,7 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' })
 
 function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
   const [lang, setLang] = useState<Lang>(() => {
-    try { return (localStorage.getItem('btcd:ui:lang') as Lang) === 'en' ? 'en' : 'es' } catch { return 'es' }
+    try { return (localStorage.getItem('btcd:ui:lang') as Lang) === 'es' ? 'es' : 'en' } catch { return 'en' }
   })
   const t = (k: string) => (translations[lang]?.[k] ?? translations.es[k] ?? k)
   useEffect(() => {
@@ -790,42 +797,43 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
         <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%' }}>
+          {/* Top row: Brand + Language toggle */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', gap:8, flexWrap:'wrap' }}>
             <div className="brand">Perp-it</div>
-            {/* Network menu: Live (Base) / Test (Base Sepolia) */}
-            <div className="network-menu">
-              <div className="segmented">
-                <button
-                  className={(chain==='base' ? 'seg active' : 'seg')}
-                  onClick={async ()=>{
-                    try { localStorage.setItem('btcd:ui:chain','base') } catch {}
-                    setUiChain('base')
-                    if (isConnected) {
-                      try { await switchChainAsync?.({ chainId: base.id }) } catch {}
-                    }
-                  }}
-                >{t('ui_network_live')}</button>
-                <button
-                  className={(chain==='baseSepolia' ? 'seg active' : 'seg')}
-                  onClick={async ()=>{
-                    try { localStorage.setItem('btcd:ui:chain','baseSepolia') } catch {}
-                    setUiChain('baseSepolia')
-                    if (isConnected) {
-                      try { await switchChainAsync?.({ chainId: baseSepolia.id }) } catch {}
-                    }
-                  }}
-                >{t('ui_network_test')}</button>
-              </div>
-            </div>
-            {/* Language toggle */}
-            <div className="network-menu" style={{ marginLeft: 8 }}>
+            {/* Language toggle next to title */}
+            <div className="lang-menu">
               <div className="segmented">
                 <button className={lang==='es' ? 'seg active':'seg'} onClick={()=>{ setLang('es'); try{localStorage.setItem('btcd:ui:lang','es')}catch{} }}>ES</button>
                 <button className={lang==='en' ? 'seg active':'seg'} onClick={()=>{ setLang('en'); try{localStorage.setItem('btcd:ui:lang','en')}catch{} }}>EN</button>
               </div>
             </div>
           </div>
-          {/* Page selector moved below the title */}
+          {/* Second row: Network menu under title */}
+          <div className="network-menu" style={{ marginTop: 2 }}>
+            <div className="segmented">
+              <button
+                className={(chain==='base' ? 'seg active' : 'seg')}
+                onClick={async ()=>{
+                  try { localStorage.setItem('btcd:ui:chain','base') } catch {}
+                  setUiChain('base')
+                  if (isConnected) {
+                    try { await switchChainAsync?.({ chainId: base.id }) } catch {}
+                  }
+                }}
+              >{t('ui_network_live')}</button>
+              <button
+                className={(chain==='baseSepolia' ? 'seg active' : 'seg')}
+                onClick={async ()=>{
+                  try { localStorage.setItem('btcd:ui:chain','baseSepolia') } catch {}
+                  setUiChain('baseSepolia')
+                  if (isConnected) {
+                    try { await switchChainAsync?.({ chainId: baseSepolia.id }) } catch {}
+                  }
+                }}
+              >{t('ui_network_test')}</button>
+            </div>
+          </div>
+          {/* Third row: Page selector below network menu */}
           <div className="network-switcher" style={{ marginTop: 4 }}>
             <div className="segmented">
               <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>

@@ -147,8 +147,55 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: [] })
     }
 
-    // For non-random markets, do not call upstream sports/football APIs here.
-    // Rely solely on Redis (populated by backend ingest/oracle pipeline) or sticky snapshot.
+    // LocalAway fallback: if nothing in Redis and sticky failed, optionally query an upstream sports-live API
+    if (market === 'localaway') {
+      try {
+        const base = (process.env.API_BASE || process.env.SPORTS_LIVE_BASE || '').trim()
+        if (base && base.startsWith('http')) {
+          const sep = base.includes('?') ? '&' : '?'
+          const url = `${base}${sep}chain=${encodeURIComponent(chain)}&limit=${limit}`
+          const res = await fetch(url, { cache: 'no-store' })
+          if (res.ok) {
+            const j = await res.json()
+            const raw = Array.isArray(j) ? j : (Array.isArray(j?.events) ? j.events : [])
+            const sanitized: any[] = []
+            for (const ev of raw) {
+              try {
+                const time = Math.floor(Number(ev?.time || ev?.timestamp || 0))
+                if (!Number.isFinite(time) || time <= 0) continue
+                const meta = typeof ev?.meta === 'object' && ev?.meta ? ev.meta : {}
+                const sport = String(meta?.sport || ev?.sport || 'football')
+                const em = emojiForSport(sport)
+                if (em && !meta.emoji) (meta as any).emoji = em
+                // normalize structure
+                sanitized.push({
+                  time,
+                  value: Number(ev?.value ?? 0),
+                  meta: {
+                    ...meta,
+                    sport,
+                    type: String(meta?.type || ev?.type || ''),
+                  },
+                })
+              } catch {}
+            }
+            if (sanitized.length) {
+              // Mirror newest-first to Redis list and update sticky snapshot
+              try {
+                for (let i = sanitized.length - 1; i >= 0; i--) {
+                  await redis.lpush(eventsKey, JSON.stringify(sanitized[i]))
+                }
+                await redis.ltrim(eventsKey, 0, eventsMax - 1)
+                try { await redis.set(stickyKey, JSON.stringify(sanitized)) } catch {}
+              } catch {}
+              return json({ events: sanitized })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Default: if nothing found, return empty array (UI will keep showing sticky/last-known).
     return json({ events: [] })
   } catch (e:any) {
     return json({ error: e?.message || String(e) }, 500)

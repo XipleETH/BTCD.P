@@ -868,9 +868,7 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
           }
         } catch {}
       }}>Cerrar</button>
-      {/* Mensajes de simulación en hover */}
-      {simClose.error && <HoverInfo label="Simulación falló" tip={String((simClose.error as any)?.shortMessage || simClose.error.message)} />}
-      {error && <HoverInfo label="Error" tip={String(error)} />}
+      {/* Ocultamos mensajes debajo de Cerrar para no ensuciar la UI */}
       {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
     </div>
   )
@@ -920,6 +918,11 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
   const entryVal = (() => {
     try { return pos ? Number(formatUnits((pos as any)[4] || 0n, 8)) : undefined } catch { return undefined }
   })()
+  const hasPos = Array.isArray(pos) ? Boolean((pos as any)[0]) : false
+  // Limpiar inputs cuando no hay posición
+  useEffect(() => {
+    if (!hasPos) { setSlInput(''); setTpInput('') }
+  }, [hasPos])
   const computeAbs = (raw: string, isSL: boolean): number | null => {
     const parsed = parseFloat((raw||'').replace(',','.'))
     if (isNaN(parsed)) return null
@@ -1001,7 +1004,9 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
   const tpPreview = tpInput ? computeAbs(tpInput, false) : null
   const inner = (
     <div className="grid gap-8">
-      <div className="muted">Entrada: {entryVal !== undefined ? (market==='btcd' ? entryVal.toFixed(4)+'%' : entryVal.toFixed(4)) : '—'} | SL actual: {stopLoss ? (market==='btcd' ? (Number(stopLoss)/1e8).toFixed(4)+'%' : (Number(stopLoss)/1e8).toFixed(4)) : '—'} | TP actual: {takeProfit ? (market==='btcd' ? (Number(takeProfit)/1e8).toFixed(4)+'%' : (Number(takeProfit)/1e8).toFixed(4)) : '—'}</div>
+      {/* Encabezado y valores actuales arriba de inputs */}
+      <div style={{ fontWeight: 700, fontSize: 14 }}>Stops (SL / TP)</div>
+      <div className="muted small">SL actual: {stopLoss ? (market==='btcd' ? (Number(stopLoss)/1e8).toFixed(4)+'%' : (Number(stopLoss)/1e8).toFixed(4)) : '—'} | TP actual: {takeProfit ? (market==='btcd' ? (Number(takeProfit)/1e8).toFixed(4)+'%' : (Number(takeProfit)/1e8).toFixed(4)) : '—'}</div>
       <div className="segmented">
         <button className={mode==='absolute' ? 'seg active':'seg'} onClick={()=>setMode('absolute')}>{market==='btcd' ? 'Absoluto (%)' : 'Absoluto (índice)'}</button>
         <button className={mode==='relative' ? 'seg active':'seg'} onClick={()=>setMode('relative')}>{market==='btcd' ? 'Relativo (Δ%)' : 'Relativo (Δ índice)'}</button>
@@ -1012,7 +1017,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
           {(() => {
             const slAbsV = slInput ? computeAbs(slInput, true) : 0
             const slOk = slAbsV === 0 || (slAbsV !== null && toScaledAbs(slAbsV) !== null)
-            const disabled = !perpsAddress || isPending || mining || !slOk
+            const disabled = !perpsAddress || isPending || mining || !slOk || !hasPos
             return <button className="btn" disabled={disabled} onClick={onSetSL}>Setear SL</button>
           })()}
         </div>
@@ -1021,7 +1026,7 @@ function StopsManager({ perpsAddress, chainKey, market, compact }: { perpsAddres
           {(() => {
             const tpAbsV = tpInput ? computeAbs(tpInput, false) : 0
             const tpOk = tpAbsV === 0 || (tpAbsV !== null && toScaledAbs(tpAbsV) !== null)
-            const disabled = !perpsAddress || isPending || mining || !tpOk
+            const disabled = !perpsAddress || isPending || mining || !tpOk || !hasPos
             return <button className="btn" disabled={disabled} onClick={onSetTP}>Setear TP</button>
           })()}
         </div>
@@ -1238,7 +1243,6 @@ function PositionCard({ perpsAddress, oracleAddress, market, chainKey }: { perps
         <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         {/* Mover Stops (SL/TP) aquí para agrupar con Mi posición */}
         <div>
-          <div className="muted small" style={{ marginBottom: 8 }}>Stops (SL / TP)</div>
           <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} market={market} compact />
         </div>
       </div>

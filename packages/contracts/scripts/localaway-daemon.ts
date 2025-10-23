@@ -271,11 +271,14 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.0001) - (dAway * 0.0001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const leagueName = g?.league?.name || g?.country?.name || 'League'
+                  const hName = g?.teams?.home?.name || 'Home'
+                  const aName = g?.teams?.away?.name || 'Away'
                   const push = await preflightAndPush(currentIndex, 'handball')
                   if (push.ok && push.hash) {
-                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
                   } else {
-                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                    console.log(new Date().toISOString(), `[HANDBALL][STAGGER][NO-TX] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
                   }
                   if (ingestUrl && ingestSecret) {
                     try {
@@ -330,11 +333,14 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const leagueName = g?.league?.name || g?.country?.name || 'League'
+                  const hName = g?.teams?.home?.name || 'Home'
+                  const aName = g?.teams?.away?.name || 'Away'
                   const push = await preflightAndPush(currentIndex, 'volleyball')
                   if (push.ok && push.hash) {
-                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
                   } else {
-                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                    console.log(new Date().toISOString(), `[VOLLEY][STAGGER][NO-TX] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
                   }
                   if (ingestUrl && ingestSecret) {
                     try {
@@ -389,11 +395,14 @@ async function main() {
                   anyActivity = true
                   const netPct = (dHome * 0.00001) - (dAway * 0.00001)
                   currentIndex = Math.max(1, currentIndex * (1 + netPct))
+                  const leagueName = g?.league?.name || g?.country?.name || 'League'
+                  const hName = g?.teams?.home?.name || 'Home'
+                  const aName = g?.teams?.away?.name || 'Away'
                   const push = await preflightAndPush(currentIndex, 'basketball')
                   if (push.ok && push.hash) {
-                    console.log(new Date().toISOString(), `[BASKET][STAGGER] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+                    console.log(new Date().toISOString(), `[BASKET][STAGGER] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
                   } else {
-                    console.log(new Date().toISOString(), `[BASKET][STAGGER][NO-TX] ${g?.league?.name || g?.country?.name || 'League'} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+                    console.log(new Date().toISOString(), `[BASKET][STAGGER][NO-TX] ${leagueName} ${hName} ${totHome}-${totAway} ${aName} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
                   }
                   if (ingestUrl && ingestSecret) {
                     try {
@@ -438,10 +447,15 @@ async function main() {
             anyActivity = true
             currentIndex = Math.max(1, currentIndex * (1 + netPct))
             const push = await preflightAndPush(currentIndex, sport)
+            const lg = it?.league || 'League'
+            const hn = it?.home?.name || 'Home'
+            const an = it?.away?.name || 'Away'
+            const scH = it?.score?.home ?? 0
+            const scA = it?.score?.away ?? 0
             if (push.ok && push.hash) {
-              console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
+              console.log(new Date().toISOString(), `[${sport.toUpperCase()}] ${lg} ${hn} ${scH}-${scA} ${an} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} tx:${push.hash}`)
             } else {
-              console.log(new Date().toISOString(), `[${sport.toUpperCase()}][NO-TX] ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
+              console.log(new Date().toISOString(), `[${sport.toUpperCase()}][NO-TX] ${lg} ${hn} ${scH}-${scA} ${an} ΔH:${dHome} ΔA:${dAway} netPct:${(netPct*100).toFixed(4)}% idx:${currentIndex.toFixed(6)} reason: preflight/send failed`)
             }
             if (ingestUrl && ingestSecret) {
               try {

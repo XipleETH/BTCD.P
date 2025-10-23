@@ -628,7 +628,6 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
           </div>
           {/* Page selector moved below the title */}
           <div className="network-switcher" style={{ marginTop: 4 }}>
-            <span className="label">Page</span>
             <div className="segmented">
               <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
               <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>

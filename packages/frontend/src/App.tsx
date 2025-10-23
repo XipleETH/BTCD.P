@@ -1258,23 +1258,39 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
   const limit = 100
   const url = `${baseUrl}/api/events?chain=${chain}&market=localaway&limit=${limit}`
+  const lsKey = `btcd:events:${chain}:localaway`
   useEffect(() => {
     let cancel = false
     const load = async () => {
       try {
         setLoading(true)
+        // Bootstrap from localStorage: never show an empty recent-events menu
+        try {
+          const raw = localStorage.getItem(lsKey)
+          if (raw && !cancel) {
+            const arr = JSON.parse(raw)
+            if (Array.isArray(arr) && arr.length) {
+              setEvents(arr)
+            }
+          }
+        } catch {}
         const res = await fetch(url, { cache: 'no-store' })
         if (res.ok) {
           const j = await res.json()
           const evs = Array.isArray(j.events) ? j.events : []
           if (!cancel) {
-            // Merge with existing, de-dup by stable meta.id or a derived key
-            const map = new Map<string, any>()
-            const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
-            for (const e of events) map.set(keyOf(e), e)
-            for (const e of evs) map.set(keyOf(e), e)
-            const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
-            setEvents(merged)
+            if (evs.length) {
+              // Merge with existing, de-dup by stable meta.id or derived key
+              const map = new Map<string, any>()
+              const keyOf = (e:any) => String(e?.meta?.id || `${e?.meta?.sport||'na'}:${e?.meta?.fixtureId||e?.meta?.leagueId||'na'}:${e?.time||0}:${e?.meta?.delta?.home||0}:${e?.meta?.delta?.away||0}`)
+              for (const e of events) map.set(keyOf(e), e)
+              for (const e of evs) map.set(keyOf(e), e)
+              const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
+              setEvents(merged)
+              try { localStorage.setItem(lsKey, JSON.stringify(merged)) } catch {}
+            } else {
+              // Keep displaying whatever we already had (from cache or earlier fetch)
+            }
           }
           // Fallback: if empty, try alternate chain key once
           if (!cancel && (!evs || evs.length === 0)) {
@@ -1291,6 +1307,7 @@ function GoalsCard({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
                   for (const e of evs2) map.set(keyOf(e), e)
                   const merged = Array.from(map.values()).sort((a:any,b:any)=> (b?.time||0) - (a?.time||0)).slice(0, 200)
                   setEvents(merged)
+                  try { localStorage.setItem(lsKey, JSON.stringify(merged)) } catch {}
                 }
               }
             } catch {}

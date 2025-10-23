@@ -26,9 +26,21 @@ export default async function handler(req: Request): Promise<Response> {
         out.push(obj)
       } catch {}
     }
+    // If we have fresh events, also snapshot to a sticky key so we can
+    // serve "last known" when the list is temporarily empty (never show empty UI)
+    const stickyKey = `btcd:events:sticky:${chain}:${market}`
     if (out.length > 0) {
+      try { await redis.set(stickyKey, JSON.stringify(out)) } catch {}
       return json({ events: out })
     }
+    // Sticky fallback: return last non-empty snapshot if available
+    try {
+      const snap = await redis.get<string>(stickyKey)
+      if (snap) {
+        const arr = JSON.parse(snap)
+        if (Array.isArray(arr) && arr.length) return json({ events: arr })
+      }
+    } catch {}
 
     // If market=random, fallback to ZSET ticks to build a simple recent numbers feed
     if (market === 'random') {
@@ -56,6 +68,8 @@ export default async function handler(req: Request): Promise<Response> {
               await redis.lpush(eventsKey, JSON.stringify(recent[i]))
             }
             await redis.ltrim(eventsKey, 0, eventsMax - 1)
+            // Update sticky snapshot as well
+            try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
           } catch {}
           return json({ events: recent })
         }
@@ -121,6 +135,8 @@ export default async function handler(req: Request): Promise<Response> {
                   await redis.lpush(eventsKey, JSON.stringify(limited[i]))
                 }
                 await redis.ltrim(eventsKey, 0, eventsMax - 1)
+                // Update sticky snapshot as well
+                try { await redis.set(stickyKey, JSON.stringify(limited)) } catch {}
               } catch {}
               return json({ events: limited })
             }
@@ -200,6 +216,8 @@ export default async function handler(req: Request): Promise<Response> {
               await redis.lpush(eventsKey, JSON.stringify(ev))
             }
             await redis.ltrim(eventsKey, 0, eventsMax - 1)
+            // Update sticky snapshot as well
+            try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
           } catch {}
           // Store guard timestamp with 15-minute TTL
           try { await redis.set(guardKey, String(now), { ex: 900 }) } catch {}

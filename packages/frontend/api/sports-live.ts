@@ -90,7 +90,7 @@ export default async function handler(req: Request): Promise<Response> {
           const prev = (await getLast('basketball', id)) || { home: totHome, away: totAway }
           const dHome = Math.max(0, totHome - prev.home)
           const dAway = Math.max(0, totAway - prev.away)
-          const netPct = (dHome - dAway) * 0.00001 // 0.001%
+          const netPct = (dHome - dAway) * 0.0001 // 0.01%
           await setLast('basketball', id, totHome, totAway)
           if (dHome || dAway) {
             items.push({ ts: nowSec, sport: 'basketball', fixtureId: id, league: g?.league?.name || g?.country?.name, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct })
@@ -99,7 +99,7 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } catch {}
 
-    // VOLLEYBALL (date-based)
+    // VOLLEYBALL (date-based) — use period points instead of match set scores
     try {
       const u = new URL('https://v1.volleyball.api-sports.io/games')
       const dateStr = new Date().toISOString().slice(0,10)
@@ -112,14 +112,16 @@ export default async function handler(req: Request): Promise<Response> {
   summary.volleyball = games.length
         for (const g of games) {
           const id = Number(g?.id || g?.game?.id || g?.fixture?.id); if (!id) continue
-          const periods = g?.scores?.periods || g?.periods || {}
-          const sumSide = (side:any) => ['first','second','third','fourth','fifth'].reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
-          const totHome = Number(g?.scores?.home ?? sumSide('home')) || 0
-          const totAway = Number(g?.scores?.away ?? sumSide('away')) || 0
+          const periods = g?.scores?.periods || g?.periods || g?.score?.periods || {}
+          const sumSide = (side:any) => ['first','second','third','fourth','fifth']
+            .reduce((s,k)=> s + (Number(periods?.[k]?.[side] ?? 0) || 0), 0)
+          // Count points by summing period points only (ignore set win counts)
+          const totHome = sumSide('home')
+          const totAway = sumSide('away')
           const prev = (await getLast('volleyball', id)) || { home: totHome, away: totAway }
           const dHome = Math.max(0, totHome - prev.home)
           const dAway = Math.max(0, totAway - prev.away)
-          const netPct = (dHome - dAway) * 0.00001 // 0.001%
+          const netPct = (dHome - dAway) * 0.0001 // 0.01%
           await setLast('volleyball', id, totHome, totAway)
           if (dHome || dAway) {
             items.push({ ts: nowSec, sport: 'volleyball', fixtureId: id, league: g?.league?.name || g?.country?.name, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct })

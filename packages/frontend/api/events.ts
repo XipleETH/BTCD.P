@@ -147,14 +147,77 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: [] })
     }
 
-    // Fallback: if no cached events for localaway, try querying our Edge live-goals endpoint.
-    // Rate-limit this fallback to once per 15 minutes per chain to avoid hammering API-Football.
+    // Fallbacks for LocalAway when cache is empty:
+    // 1) Try consolidated aggregator (/api/sports-live) to surface multi-sport deltas
+    // 2) If still empty, try football-only live goals (/api/football-live-goals)
+    // Both are rate-limited to avoid hammering upstream APIs.
     // Only do this when market=localaway; otherwise return empty
     if (market !== 'localaway') return json({ events: [] })
 
     try {
-      // Guard fetch frequency with Redis key
+      // 1) Aggregator fallback (all sports). Guarded by TTL key.
       const now = Math.floor(Date.now()/1000)
+      const aggGuardKey = `btcd:events:fallback:agg:last_ts:${chain}`
+      let canCallAggregator = true
+      try {
+        const lastTsStr = await redis.get<string>(aggGuardKey)
+        const lastTs = lastTsStr ? Number(lastTsStr) : 0
+        if (lastTs && (now - lastTs) < 900) {
+          canCallAggregator = false
+        }
+      } catch {}
+
+      if (canCallAggregator) {
+        try {
+          const origin = new URL(req.url).origin
+          const url = new URL(origin + '/api/sports-live')
+          const guard = (process.env.API_SECRET || '').trim()
+          if (guard) url.searchParams.set('secret', guard)
+          url.searchParams.set('chain', chain)
+          const res = await fetch(url.toString(), { cache: 'no-store' })
+          if (res.ok) {
+            const j: any = await res.json()
+            const items = Array.isArray(j?.items) ? j.items : []
+            // Map aggregator items to event payloads; newest first by ts
+            items.sort((a:any,b:any)=> (Number(b?.ts||0)) - (Number(a?.ts||0)))
+            const recent = items.slice(0, limit).map((it:any) => ({
+              time: Number(it?.ts) || Math.floor(Date.now()/1000),
+              value: null,
+              meta: {
+                id: `${it?.sport||'na'}:${it?.fixtureId||it?.leagueId||'na'}:${Number(it?.ts)||0}:${Number(it?.delta?.home||0)||0}:${Number(it?.delta?.away||0)||0}`,
+                type: 'point',
+                sport: it?.sport,
+                fixtureId: it?.fixtureId,
+                league: it?.league,
+                leagueId: it?.leagueId,
+                home: it?.home,
+                away: it?.away,
+                score: it?.score,
+                delta: it?.delta,
+                deltaPct: it?.deltaPct,
+                emoji: emojiForSport(String(it?.sport||''))
+              }
+            }))
+            if (recent.length) {
+              try {
+                // Push newest-first so head is most recent
+                for (let i = recent.length - 1; i >= 0; i--) {
+                  await redis.lpush(eventsKey, JSON.stringify(recent[i]))
+                }
+                await redis.ltrim(eventsKey, 0, eventsMax - 1)
+                // Update sticky
+                try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
+              } catch {}
+              // Store guard timestamp with 15-minute TTL
+              try { await redis.set(aggGuardKey, String(now), { ex: 900 }) } catch {}
+              return json({ events: recent })
+            }
+          }
+        } catch {}
+      }
+
+      // 2) Football-only fallback (goals)
+      // Guard fetch frequency with Redis key
       const guardKey = `btcd:events:fallback:football:last_ts:${chain}`
       try {
         const lastTsStr = await redis.get<string>(guardKey)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { http, WagmiProvider } from 'wagmi'
+import { http, WagmiProvider, useSwitchChain, useAccount } from 'wagmi'
 import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -567,9 +567,22 @@ function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' })
 }
 
 function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
-  // Derive chain from wallet network; default to Base Sepolia when unknown/disconnected
+  // Wallet and chain management
   const chainId = useChainId()
-  const chain: 'base'|'baseSepolia' = chainId === base.id ? 'base' : 'baseSepolia'
+  const { isConnected } = useAccount()
+  const { switchChainAsync } = useSwitchChain()
+  // UI chain override to allow switching even when disconnected (persisted)
+  const [uiChain, setUiChain] = useState<'base'|'baseSepolia' | null>(() => {
+    try {
+      const raw = localStorage.getItem('btcd:ui:chain')
+      if (raw === 'base' || raw === 'baseSepolia') return raw
+    } catch {}
+    return null
+  })
+  // Effective chain: wallet chain if connected, else UI override or default Base Sepolia
+  const chain: 'base'|'baseSepolia' = isConnected
+    ? (chainId === base.id ? 'base' : 'baseSepolia')
+    : (uiChain || 'baseSepolia')
 
   // addresses from deployed mapping (read-only in UI)
   const [oracleAddress, setOracleAddress] = useState<string>('')
@@ -584,9 +597,37 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
   return (
     <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
       <header className="header">
-        <div className="header-left">
-          <div className="brand">Perp-it</div>
-          <div className="network-switcher" style={{ marginLeft: 8 }}>
+        <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%' }}>
+            <div className="brand">Perp-it</div>
+            {/* Network menu: Live (Base) / Test (Base Sepolia) */}
+            <div className="network-menu">
+              <div className="segmented">
+                <button
+                  className={(chain==='base' ? 'seg active' : 'seg')}
+                  onClick={async ()=>{
+                    try { localStorage.setItem('btcd:ui:chain','base') } catch {}
+                    setUiChain('base')
+                    if (isConnected) {
+                      try { await switchChainAsync?.({ chainId: base.id }) } catch {}
+                    }
+                  }}
+                >Live Perps</button>
+                <button
+                  className={(chain==='baseSepolia' ? 'seg active' : 'seg')}
+                  onClick={async ()=>{
+                    try { localStorage.setItem('btcd:ui:chain','baseSepolia') } catch {}
+                    setUiChain('baseSepolia')
+                    if (isConnected) {
+                      try { await switchChainAsync?.({ chainId: baseSepolia.id }) } catch {}
+                    }
+                  }}
+                >Test Perps</button>
+              </div>
+            </div>
+          </div>
+          {/* Page selector moved below the title */}
+          <div className="network-switcher" style={{ marginTop: 4 }}>
             <span className="label">Page</span>
             <div className="segmented">
               <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>

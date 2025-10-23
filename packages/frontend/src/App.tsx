@@ -673,9 +673,9 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
         <>
           <div className="card-header"><h3>Abrir posición</h3><span className="muted">Fee: 0.10% al abrir</span></div>
           <div className="card-body grid gap-8">
-            <div className="segmented">
-              <button className={isLong? 'seg active':'seg'} onClick={()=>setIsLong(true)}>Long</button>
-              <button className={!isLong? 'seg active':'seg'} onClick={()=>setIsLong(false)}>Short</button>
+            <div className="row" style={{ gap: 8 }}>
+              <button className={'btn long-btn' + (isLong ? ' active' : '')} onClick={()=>setIsLong(true)}>Long</button>
+              <button className={'btn short-btn' + (!isLong ? ' active' : '')} onClick={()=>setIsLong(false)}>Short</button>
             </div>
             <div className="field">
               <label>Leverage: <strong>x{leverage}</strong></label>
@@ -711,9 +711,10 @@ function OpenPosition({ perpsAddress, chainKey, compact, controlled }: { perpsAd
           setLocalError(e?.shortMessage || e?.message || String(e))
         }
       }}>Abrir</button>
-      {simOpen.error && <div className="error">Simulación falló: {String((simOpen.error as any)?.shortMessage || simOpen.error.message)}</div>}
-      {localError && <div className="error">{localError}</div>}
-      {error && <div className="error">{String(error)}</div>}
+      {/* Mensajes de simulación en hover */}
+      {simOpen.error && <HoverInfo label="Simulación falló" tip={String((simOpen.error as any)?.shortMessage || simOpen.error.message)} />}
+      {localError && <HoverInfo label="Error" tip={localError} />}
+      {error && <HoverInfo label="Error" tip={String(error)} />}
       {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
     </div>
   )
@@ -867,8 +868,9 @@ function ClosePosition({ perpsAddress, oracleAddress, chainKey, minimal }: { per
           }
         } catch {}
       }}>Cerrar</button>
-      {simClose.error && <div className="error">Simulación falló: {String((simClose.error as any)?.shortMessage || simClose.error.message)}</div>}
-      {error && <div className="error">{String(error)}</div>}
+      {/* Mensajes de simulación en hover */}
+      {simClose.error && <HoverInfo label="Simulación falló" tip={String((simClose.error as any)?.shortMessage || simClose.error.message)} />}
+      {error && <HoverInfo label="Error" tip={String(error)} />}
       {(isPending || mining) && <div className="muted mt-8">Enviando transacción...</div>}
     </div>
   )
@@ -1169,12 +1171,12 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
     <div className="card">
       <div className="card-body grid gap-12">
         <div>
-          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : 'Precio Random (oráculo)'}</div>
+          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : (market==='random' ? 'Precio Random (oráculo)' : 'Local/Away Index (oráculo)')}</div>
           <OraclePrice oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         </div>
-        <div className="segmented">
-          <button className={isLong? 'seg long-btn active':'seg long-btn'} onClick={()=>setIsLong(true)}>Long</button>
-          <button className={!isLong? 'seg short-btn active':'seg short-btn'} onClick={()=>setIsLong(false)}>Short</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className={'btn long-btn' + (isLong ? ' active' : '')} onClick={()=>setIsLong(true)}>Long</button>
+          <button className={'btn short-btn' + (!isLong ? ' active' : '')} onClick={()=>setIsLong(false)}>Short</button>
         </div>
         <div className="field">
           <label>Leverage: <strong>x{leverage}</strong></label>
@@ -1189,7 +1191,6 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
           <div style={{ width: 8 }} />
           <ClosePosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chainKey} minimal />
         </div>
-        <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} market={market} compact />
         <div className="muted small">Fees: 0.10% al abrir y 0.10% al cerrar</div>
       </div>
     </div>
@@ -1200,8 +1201,13 @@ function PositionCard({ perpsAddress, oracleAddress, market, chainKey }: { perps
   return (
     <div className="card">
       <div className="card-header"><h3>Mi posición</h3></div>
-      <div className="card-body">
+      <div className="card-body grid gap-12">
         <MyPosition perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
+        {/* Mover Stops (SL/TP) aquí para agrupar con Mi posición */}
+        <div>
+          <div className="muted small" style={{ marginBottom: 8 }}>Stops (SL / TP)</div>
+          <StopsManager perpsAddress={perpsAddress} chainKey={chainKey} market={market} compact />
+        </div>
       </div>
     </div>
   )
@@ -1246,6 +1252,13 @@ function ConfigCard({ oracleAddress, perpsAddress }: { oracleAddress: string, pe
 
 function TreasuryCard({ perpsAddress, desired }: { perpsAddress: string, desired: 'base'|'baseSepolia' }) {
   return <ContractTreasury perpsAddress={perpsAddress} desired={desired} />
+}
+
+function HoverInfo({ label, tip }: { label: string, tip: string }) {
+  if (!tip) return null
+  return (
+    <span className="muted small" title={tip} style={{ marginLeft: 8, cursor: 'help', display: 'inline-block' }}>ⓘ {label}</span>
+  )
 }
 
 function CopyBtn({ text }: { text: string }) {

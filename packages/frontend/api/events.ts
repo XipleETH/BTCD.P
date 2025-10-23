@@ -147,79 +147,80 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: [] })
     }
 
-    // LocalAway fallback: if nothing in Redis and sticky failed, optionally query an upstream sports-live API
+    // LocalAway fallback: if nothing in Redis and sticky failed, query an upstream sports-live API
     if (market === 'localaway') {
-      try {
-        // Prefer same-origin by default so we can include API secret automatically; allow override via env
-        const defaultBase = new URL('/api/sports-live', req.url).toString()
-        const base = (process.env.API_BASE || process.env.SPORTS_LIVE_BASE || defaultBase).trim()
-        if (base && base.startsWith('http')) {
+      // Try public aggregator first (same one daemon uses), then same-origin as a fallback
+      const publicBase = (process.env.SPORTS_LIVE_PUBLIC_BASE || 'https://perp-it.xyz/api/sports-live').trim()
+      const sameOrigin = new URL('/api/sports-live', req.url).toString()
+      const candidates = [publicBase, (process.env.API_BASE || process.env.SPORTS_LIVE_BASE || sameOrigin).trim()]
+      for (const base of candidates) {
+        try {
+          if (!base || !base.startsWith('http')) continue
           const u = new URL(base)
           u.searchParams.set('chain', chain)
           u.searchParams.set('market', 'localaway')
           u.searchParams.set('limit', String(limit))
           if (leagues) u.searchParams.set('leagues', leagues)
-          // Pass secret if upstream is guarded
+          // Only include secret when calling same-origin or explicitly configured
           const upstreamSecret = (process.env.API_SECRET || process.env.SPORTS_LIVE_SECRET || '').trim()
-          if (upstreamSecret) u.searchParams.set('secret', upstreamSecret)
+          const isSameOrigin = u.origin === new URL(req.url).origin
+          if (upstreamSecret && isSameOrigin) u.searchParams.set('secret', upstreamSecret)
           const res = await fetch(u.toString(), { cache: 'no-store' })
-          if (res.ok) {
-            const j = await res.json()
-            // Accept multiple shapes: direct array, {events:[]}, or {items:[]}
-            const raw = Array.isArray(j)
-              ? j
-              : (Array.isArray(j?.events)
-                  ? j.events
-                  : (Array.isArray(j?.items) ? j.items : []))
-            const sanitized: any[] = []
-            for (const ev of raw) {
-              try {
-                const time = Math.floor(Number(ev?.time || ev?.timestamp || ev?.ts || 0))
-                if (!Number.isFinite(time) || time <= 0) continue
-                const meta = (typeof ev?.meta === 'object' && ev?.meta) ? ev.meta : {}
-                const sport = String(meta?.sport || ev?.sport || 'football')
-                const em = emojiForSport(sport)
-                if (em && !meta.emoji) (meta as any).emoji = em
-                // normalize structure; include common fields when coming from sports-live {items}
-                const value = Number(ev?.value ?? ev?.deltaPct ?? 0)
-                const type = String(meta?.type || ev?.type || (ev?.delta || ev?.deltaPct ? 'delta' : ''))
-                const league = (meta as any)?.league || ev?.league || ev?.leagueName
-                const home = (meta as any)?.home || ev?.home
-                const away = (meta as any)?.away || ev?.away
-                const score = (meta as any)?.score || ev?.score
-                const delta = (meta as any)?.delta || ev?.delta
-                const deltaPct = (meta as any)?.deltaPct ?? ev?.deltaPct
-                sanitized.push({
-                  time,
-                  value,
-                  meta: {
-                    ...meta,
-                    sport,
-                    type,
-                    league,
-                    home,
-                    away,
-                    score,
-                    delta,
-                    deltaPct,
-                  },
-                })
-              } catch {}
-            }
-            if (sanitized.length) {
-              // Mirror newest-first to Redis list and update sticky snapshot
-              try {
-                for (let i = sanitized.length - 1; i >= 0; i--) {
-                  await redis.lpush(eventsKey, JSON.stringify(sanitized[i]))
-                }
-                await redis.ltrim(eventsKey, 0, eventsMax - 1)
-                try { await redis.set(stickyKey, JSON.stringify(sanitized)) } catch {}
-              } catch {}
-              return json({ events: sanitized })
-            }
+          if (!res.ok) continue
+          const j = await res.json()
+          // Accept multiple shapes: direct array, {events:[]}, or {items:[]}
+          const raw = Array.isArray(j)
+            ? j
+            : (Array.isArray(j?.events)
+                ? j.events
+                : (Array.isArray(j?.items) ? j.items : []))
+          const sanitized: any[] = []
+          for (const ev of raw) {
+            try {
+              const time = Math.floor(Number(ev?.time || ev?.timestamp || ev?.ts || 0))
+              if (!Number.isFinite(time) || time <= 0) continue
+              const meta = (typeof ev?.meta === 'object' && ev?.meta) ? ev.meta : {}
+              const sport = String(meta?.sport || ev?.sport || 'football')
+              const em = emojiForSport(sport)
+              if (em && !meta.emoji) (meta as any).emoji = em
+              // normalize structure; include common fields when coming from sports-live {items}
+              const value = Number(ev?.value ?? ev?.deltaPct ?? 0)
+              const type = String(meta?.type || ev?.type || (ev?.delta || ev?.deltaPct ? 'delta' : ''))
+              const league = (meta as any)?.league || ev?.league || ev?.leagueName
+              const home = (meta as any)?.home || ev?.home
+              const away = (meta as any)?.away || ev?.away
+              const score = (meta as any)?.score || ev?.score
+              const delta = (meta as any)?.delta || ev?.delta
+              const deltaPct = (meta as any)?.deltaPct ?? ev?.deltaPct
+              sanitized.push({
+                time,
+                value,
+                meta: {
+                  ...meta,
+                  sport,
+                  type,
+                  league,
+                  home,
+                  away,
+                  score,
+                  delta,
+                  deltaPct,
+                },
+              })
+            } catch {}
           }
-        }
-      } catch {}
+          if (sanitized.length) {
+            try {
+              for (let i = sanitized.length - 1; i >= 0; i--) {
+                await redis.lpush(eventsKey, JSON.stringify(sanitized[i]))
+              }
+              await redis.ltrim(eventsKey, 0, eventsMax - 1)
+              try { await redis.set(stickyKey, JSON.stringify(sanitized)) } catch {}
+            } catch {}
+            return json({ events: sanitized })
+          }
+        } catch {}
+      }
     }
 
     // Default: if nothing found, return empty array (UI will keep showing sticky/last-known).

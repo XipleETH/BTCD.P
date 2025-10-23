@@ -295,11 +295,8 @@ async function main() {
               } catch (e:any) { console.warn('handball stagger fetch failed', e?.message || e) }
             }
             if (slot === 2 && apiKey) {
-              // VOLLEYBALL (date-based)
+              // VOLLEYBALL (date-based) — cooldown disabled for volleyball in stagger mode
               try {
-                if (!canRun('volleyball', nowSec)) { console.log(new Date().toISOString(), '[STAGGER] volleyball cooldown active — skip'); }
-                else {
-                  markRun('volleyball', nowSec)
                 const headers = { 'x-apisports-key': apiKey, 'accept': 'application/json' }
                 const url = new URL('https://v1.volleyball.api-sports.io/games')
                 const dateStr = new Date().toISOString().slice(0,10)
@@ -353,7 +350,6 @@ async function main() {
                   }
                   lastVolley.set(id, { home: totHome, away: totAway })
                   if (lastApi && ingestSecret) { try { await axios.post(lastApi, { secret: ingestSecret, sport: 'volleyball', fixture: id, home: totHome, away: totAway }, { timeout: 8000 }) } catch {} }
-                }
                 }
               } catch (e:any) { console.warn('volleyball stagger fetch failed', e?.message || e) }
             }

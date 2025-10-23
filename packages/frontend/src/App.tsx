@@ -420,7 +420,7 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
       <div className="card-header">
         <div className="tabs" style={{ display:'flex', alignItems:'center', gap:8 }}>
           <div style={{ fontSize:12, fontWeight:600, opacity:0.8 }}>
-            {market==='btcd' ? 'BTC Dominance' : (market==='random' ? 'Random Index' : 'Local/Away Index')}
+            {market==='btcd' ? 'BTC Dominance' : (market==='random' ? 'Random Index' : 'Home/Away Index')}
           </div>
           {(['1m','5m','15m','1h','4h','1d','3d','1w'] as const).map(k => (
             <button key={k} onClick={()=>setTf(k)} className={tf===k? 'tab active':'tab'}>{k}</button>
@@ -519,6 +519,11 @@ function DominanceChart({ oracleAddress, chainKey, market }: { oracleAddress: st
             </div>
           )}
           <div id={containerId} className="chart" />
+          {/* Scroll guards around the chart to ease page scrolling */}
+          <div className="chart-guard top" title="Arrastra aquí para desplazar la página" />
+          <div className="chart-guard bottom" title="Arrastra aquí para desplazar la página" />
+          <div className="chart-guard left" title="Arrastra aquí para desplazar la página" />
+          <div className="chart-guard right" title="Arrastra aquí para desplazar la página" />
           <div style={{ position:'absolute', top: overlayTop, right: 6, background:'#fff', color:'#111', border:'1px solid #d1d5db', boxShadow:'0 1px 3px rgba(0,0,0,0.25)', padding:'4px 8px', borderRadius:4, fontSize:12, lineHeight:1.15, fontWeight:600, minWidth:64, textAlign:'right' }}>
             <div>
               {(() => {
@@ -586,7 +591,7 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
             <div className="segmented">
               <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
               <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
-              <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Local/Away</a>
+              <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Home/Away</a>
             </div>
           </div>
         </div>
@@ -1118,7 +1123,7 @@ function OraclePrice({ oracleAddress, market, chainKey }: { oracleAddress: strin
   if (market === 'btcd') {
     return <div className="muted">BTC Dominance: {pct !== undefined ? `${pct.toFixed(2)}%` : '—'}</div>
   }
-  return <div className="muted">{market==='random' ? 'Random Index' : 'Local/Away Index'}: {pct !== undefined ? `${pct.toFixed(2)}` : '—'}</div>
+  return <div className="muted">{market==='random' ? 'Random Index' : 'Home/Away Index'}: {pct !== undefined ? `${pct.toFixed(2)}` : '—'}</div>
 }
 
 export default function App() {
@@ -1209,7 +1214,7 @@ function TradePanel({ perpsAddress, oracleAddress, chainKey, market }: { perpsAd
     <div className="card">
       <div className="card-body grid gap-12">
         <div>
-          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : (market==='random' ? 'Precio Random (oráculo)' : 'Local/Away Index (oráculo)')}</div>
+          <div className="muted small">{market==='btcd' ? 'Precio BTC.D (oráculo)' : (market==='random' ? 'Precio Random (oráculo)' : 'Home/Away Index (oráculo)')}</div>
           <OraclePrice oracleAddress={oracleAddress} market={market} chainKey={chainKey} />
         </div>
         <div className="row" style={{ gap: 8 }}>

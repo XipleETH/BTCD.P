@@ -65,7 +65,7 @@ MIN_CHANGE=0.01      # 1 basis point (0.01%) para evitar pushes redundantes
 ```
 Ten en cuenta que intervalos muy cortos (p.ej., 1 segundo) podrían gatillar rate limits y/o gas innecesario. Se recomienda 15–60s y habilitar `MIN_CHANGE`.
 
-## Nuevo mercado: Local/Away (goles en vivo)
+## Nuevo mercado: Home/Away (goles en vivo)
 Este mercado agrega +1 por cada gol del equipo local y -1 por cada gol del visitante sobre todos los partidos en vivo, partiendo del índice 10000.
 
 Componentes:
@@ -98,7 +98,7 @@ Daemon:
 ```
 npm run daemon:localaway -- --network baseSepolia
 ```
-Frontend: ver pestaña Local/Away (#localaway) junto a BTC.D y Random.
+Frontend: ver pestaña Home/Away (#localaway) junto a BTC.D y Random.
 
 ### Modo multi-deporte (una sola llamada por verificación)
 

@@ -12,9 +12,14 @@ export default async function handler(req: Request): Promise<Response> {
   const leagues = (searchParams.get('leagues') || '').trim()
   const oracle = (searchParams.get('oracle') || '').trim()
     const redis = Redis.fromEnv()
-    const eventsKey = `btcd:events:${chain}:${market}`
+  const eventsKey = `btcd:events:${chain}:${market}`
+  const legacyKey = market === 'localaway' ? `btcd:events:${chain}:homeaway` : ''
   const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
-    const arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
+    let arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
+    // Legacy alias: if localaway is empty, read from old 'homeaway' key
+    if ((!arr || arr.length === 0) && legacyKey) {
+      try { arr = await redis.lrange<string>(legacyKey, 0, limit - 1) } catch {}
+    }
     const out = [] as any[]
     for (const raw of arr) {
       try {
@@ -28,14 +33,18 @@ export default async function handler(req: Request): Promise<Response> {
     }
     // If we have fresh events, also snapshot to a sticky key so we can
     // serve "last known" when the list is temporarily empty (never show empty UI)
-    const stickyKey = `btcd:events:sticky:${chain}:${market}`
+  const stickyKey = `btcd:events:sticky:${chain}:${market}`
+  const legacySticky = market === 'localaway' ? `btcd:events:sticky:${chain}:homeaway` : ''
     if (out.length > 0) {
       try { await redis.set(stickyKey, JSON.stringify(out)) } catch {}
       return json({ events: out })
     }
     // Sticky fallback: return last non-empty snapshot if available
     try {
-      const snap = await redis.get<string>(stickyKey)
+      let snap = await redis.get<string>(stickyKey)
+      if ((!snap || snap.length === 0) && legacySticky) {
+        try { snap = await redis.get<string>(legacySticky) } catch {}
+      }
       if (snap) {
         const arr = JSON.parse(snap)
         if (Array.isArray(arr) && arr.length) return json({ events: arr })

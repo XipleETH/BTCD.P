@@ -19,8 +19,12 @@ export default async function handler(req: Request): Promise<Response> {
   if (market === 'localaway' && metric === 'delta') {
       // For localaway delta view: build +1/-1/0 from events list
       const eventsKey = `btcd:events:${chain}:${market}`
+      const legacyKey = `btcd:events:${chain}:homeaway`
       // Grab more than default to cover longer timeframes
-      const raw = await redis.lrange<string>(eventsKey, 0, 2000)
+      let raw = await redis.lrange<string>(eventsKey, 0, 2000)
+      if ((!raw || raw.length === 0)) {
+        try { const alt = await redis.lrange<string>(legacyKey, 0, 2000); if (alt && alt.length) raw = alt } catch {}
+      }
       for (let i = raw.length - 1; i >= 0; i--) {
         try {
           const ev = JSON.parse(raw[i])

@@ -32,6 +32,9 @@ const translations: Record<Lang, Record<string, string>> = {
   lab_votes: 'Votos',
   lab_vote_btn: 'Votar',
   lab_voted: 'Votado',
+  lab_new_test_in: 'Nuevo Test Perps en:',
+  lab_getting_ready: 'Preparando para testing…',
+  lab_winner: 'Ganadora:',
   lab_switch_to_sepolia: 'Cambia a Base Sepolia para votar',
   lab_list_up: 'Sube',
   lab_list_down: 'Baja',
@@ -144,6 +147,9 @@ const translations: Record<Lang, Record<string, string>> = {
   lab_votes: 'Votes',
   lab_vote_btn: 'Vote',
   lab_voted: 'Voted',
+  lab_new_test_in: 'New test perps in:',
+  lab_getting_ready: 'Getting ready for testing…',
+  lab_winner: 'Winner:',
   lab_switch_to_sepolia: 'Switch to Base Sepolia to vote',
   lab_list_up: 'Up',
   lab_list_down: 'Down',
@@ -1790,6 +1796,50 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [votedIds, setVotedIds] = useState<Record<string, true>>({})
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
 
+  // Biweekly countdown to Saturday 00:01 UTC based on an anchor epoch
+  // Anchor chosen as a Saturday 00:01 UTC: 2025-10-25 00:01:00Z
+  const EPOCH_MS = Date.parse('2025-10-25T00:01:00Z')
+  const PERIOD_MS = 14 * 24 * 60 * 60 * 1000
+  const nextBoundary = (nowMs: number) => {
+    if (!Number.isFinite(nowMs)) nowMs = Date.now()
+    if (nowMs <= EPOCH_MS) return EPOCH_MS
+    const k = Math.ceil((nowMs - EPOCH_MS) / PERIOD_MS)
+    return EPOCH_MS + k * PERIOD_MS
+  }
+  const [targetMs, setTargetMs] = useState<number>(() => nextBoundary(Date.now()))
+  const [remainingMs, setRemainingMs] = useState<number>(Math.max(0, targetMs - Date.now()))
+  useEffect(() => {
+    let id: number | undefined
+    const tick = () => {
+      const now = Date.now()
+      const rem = targetMs - now
+      if (rem <= 0) {
+        // roll to the next period so the counter continues
+        const nxt = nextBoundary(now + 1000)
+        setTargetMs(nxt)
+        setRemainingMs(Math.max(0, nxt - now))
+      } else {
+        setRemainingMs(rem)
+      }
+      id = window.setTimeout(tick, 1000)
+    }
+    id = window.setTimeout(tick, 1000)
+    return () => { if (id) window.clearTimeout(id) }
+  }, [targetMs])
+  const fmtCountdown = (ms: number) => {
+    const totalSec = Math.max(0, Math.floor(ms / 1000))
+    const days = Math.floor(totalSec / 86400)
+    const rem = totalSec % 86400
+    const hrs = Math.floor(rem / 3600)
+    const rem2 = rem % 3600
+    const mins = Math.floor(rem2 / 60)
+    const secs = rem2 % 60
+    const parts: string[] = []
+    if (days > 0) parts.push(`${days}d`)
+    parts.push(String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0'))
+    return parts.join(' ')
+  }
+
   const proposalsQ = useQuery({
     queryKey: ['lab-proposals', address || ''],
     queryFn: async () => {
@@ -1870,7 +1920,38 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
-        <div className="card-header"><h3>{t('lab_title')}</h3></div>
+        <div className="card-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <h3>{t('lab_title')}</h3>
+          <div style={{ textAlign:'right' }}>
+            {remainingMs > 0 ? (
+              <div className="small" style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+                <span className="muted">{t('lab_new_test_in')}</span>
+                <strong>{fmtCountdown(remainingMs)}</strong>
+              </div>
+            ) : (
+              <div className="small" style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+                <span className="muted">{t('lab_getting_ready')}</span>
+              </div>
+            )}
+            {/* Winner announcement near boundary: take top by votes (already sorted server-side); fallback to client sort */}
+            {(() => {
+              const all = (proposalsQ.data || []) as any[]
+              if (!all.length) return null
+              // Ensure top by votes desc, tie ts desc as fallback
+              const sorted = [...all].sort((a,b)=>{
+                const va = Number(a?.votes||0), vb = Number(b?.votes||0)
+                if (vb !== va) return vb - va
+                return Number(b?.ts||0) - Number(a?.ts||0)
+              })
+              const top = sorted[0]
+              return (
+                <div className="small" style={{ marginTop: 2 }}>
+                  <span className="muted">{t('lab_winner')}</span> <strong>{top?.name || '—'}</strong>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
         <div className="card-body">
           <form className="grid" style={{ gap: 12 }} onSubmit={onSubmit}>
             <div className="field">

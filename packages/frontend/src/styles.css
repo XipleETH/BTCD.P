@@ -95,8 +95,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .btn.warning { background: #3a2b12; color: #ffe9b3; border-color: #5c430f; }
 .btn.sm { padding: 6px 10px; font-size: 12px; }
 
-/* Lab button: transparent when not active, radioactive green when active */
-.lab-btn { background: transparent !important; border-color: transparent !important; color: var(--muted) !important; }
+/* Lab button: transparent when not active, but keep a subtle border like other header buttons;
+  when active, use the radioactive green style */
+.lab-btn { background: transparent !important; border-color: var(--border) !important; color: var(--muted) !important; }
 .lab-btn.active { background: #103024 !important; color: #d9ffe6 !important; border-color: #27c37b !important; box-shadow: 0 0 0 1px rgba(39,195,123,0.4) inset, 0 0 18px rgba(39,195,123,0.25); }
 
 /* In Lab mode, keep Live/Test segmented buttons transparent even if active */
@@ -238,3 +239,8 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .chart-guard.bottom { bottom: 0; left: 0; right: 0; height: 24px; background: linear-gradient(to top, rgba(255,255,255,0.05), rgba(255,255,255,0)); border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; touch-action: pan-y; }
 .chart-guard.left { top: 0; bottom: 0; left: 0; width: 18px; background: linear-gradient(to right, rgba(255,255,255,0.05), rgba(255,255,255,0)); border-top-left-radius: 8px; border-bottom-left-radius: 8px; touch-action: pan-y; }
 .chart-guard.right { top: 0; bottom: 0; right: 0; width: 18px; background: linear-gradient(to left, rgba(255,255,255,0.05), rgba(255,255,255,0)); border-top-right-radius: 8px; border-bottom-right-radius: 8px; touch-action: pan-y; }
+
+/* On mobile, reduce the bottom chart guard height so the rectangle is not too large */
+@media (max-width: 640px) {
+  .chart-guard.bottom { height: 12px; }
+}

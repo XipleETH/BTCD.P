@@ -15,7 +15,8 @@ export default async function handler(req: Request): Promise<Response> {
   const eventsKey = `btcd:events:${chain}:${market}`
   const legacyKey = market === 'localaway' ? `btcd:events:${chain}:homeaway` : ''
   const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
-    let arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
+  // Upstash can sometimes return either stringified JSON or already-parsed objects
+  let arr = await redis.lrange<any>(eventsKey, 0, limit - 1)
     // Legacy alias: if localaway is empty, read from old 'homeaway' key
     if ((!arr || arr.length === 0) && legacyKey) {
       try { arr = await redis.lrange<string>(legacyKey, 0, limit - 1) } catch {}
@@ -23,11 +24,15 @@ export default async function handler(req: Request): Promise<Response> {
     const out = [] as any[]
     for (const raw of arr) {
       try {
-        const obj = JSON.parse(raw)
+        const obj = typeof raw === 'string' ? JSON.parse(raw) : (typeof raw === 'object' && raw ? raw : null)
+        if (!obj) continue
         // Ensure emoji exists if sport tagged
         const sport = String(obj?.meta?.sport || '')
         const em = emojiForSport(sport)
-        if (em && !obj?.meta?.emoji) obj.meta.emoji = em
+        if (em) {
+          if (!obj.meta) obj.meta = {}
+          if (!obj.meta.emoji) obj.meta.emoji = em
+        }
         out.push(obj)
       } catch {}
     }

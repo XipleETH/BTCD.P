@@ -17,9 +17,14 @@ export default async function handler(req: Request): Promise<Response> {
       const items: any[] = []
       if (Array.isArray(ids)) {
         for (const id of ids) {
-          const raw = await redis.get<string>(`btcd:lab:proposal:${id}`)
-          if (raw) {
+          const raw = await redis.get<any>(`btcd:lab:proposal:${id}`)
+          if (raw === undefined || raw === null) continue
+          if (typeof raw === 'string') {
             try { items.push(JSON.parse(raw)) } catch {}
+          } else if (typeof raw === 'object') {
+            try { items.push(raw) } catch {}
+          } else {
+            // fallback: ignore unsupported types (numbers, etc.)
           }
         }
       }

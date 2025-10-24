@@ -16,10 +16,10 @@ export default async function handler(_req: Request): Promise<Response> {
       try { details.ping = await (redis as any).ping?.() } catch {}
       // Simple round-trip with random key
       const key = `btcd:lab:health:${Math.random().toString(36).slice(2,8)}`
-      details.set = await redis.set(key, '1', { ex: 15 })
-      details.get = await redis.get<string>(key)
+  details.set = await redis.set(key, '1', { ex: 15 })    
+  details.get = await redis.get<string>(key)
       try { details.del = await redis.del(key) } catch {}
-      ok = details.get === '1'
+  ok = String(details.get) === '1'
     } catch (e: any) {
       ok = false
       err = e?.message || String(e)

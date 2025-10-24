@@ -334,6 +334,9 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
+  const bannerRef = useRef<HTMLDivElement | null>(null)
+  const [bannerMeasured, setBannerMeasured] = useState(false)
+  const [visibleBannerCount, setVisibleBannerCount] = useState<number>(8)
   const containerId = useMemo(() => `chart_container_${market}`, [market])
 
   // Reset local state when switching markets to show a fresh chart
@@ -487,6 +490,35 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
     setOverlayTop(clamped)
   }, [livePrice, candles, tf])
 
+  // Recompute how many event chips fit in the banner without clipping
+  useEffect(() => {
+    if (market !== 'localaway') return
+    setBannerMeasured(false)
+    const recompute = () => {
+      try {
+        const el = bannerRef.current
+        if (!el) return
+        const containerWidth = el.clientWidth || 0
+        const chips = Array.from(el.querySelectorAll('.evt-chip')) as HTMLElement[]
+        let used = 0
+        let count = 0
+        const GAP = 16
+        for (let i = 0; i < chips.length; i++) {
+          const w = chips[i].offsetWidth || 0
+          const next = used + (i > 0 ? GAP : 0) + w
+          if (next <= containerWidth - 8) { used = next; count++ } else { break }
+        }
+        setVisibleBannerCount(count)
+        setBannerMeasured(true)
+      } catch {}
+    }
+    // Recompute after paint
+    const id = window.setTimeout(recompute, 0)
+    const onResize = () => recompute()
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); window.clearTimeout(id) }
+  }, [market, localawayEvents])
+
   // Initialize chart; recreate when market changes to ensure a fresh chart per market
   useEffect(() => {
     const el = document.getElementById(containerId) as HTMLDivElement | null
@@ -585,9 +617,9 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                 gap:16,
                 alignItems:'center',
                 minHeight: 28
-              }}>
+              }} ref={bannerRef}>
                 {Array.isArray(localawayEvents) && localawayEvents.length > 0 ? (
-                  localawayEvents.slice(0, 8).map((e, idx) => {
+                  localawayEvents.map((e, idx) => {
                     const lg = e.meta?.league || ''
                     const home = e.meta?.home?.name || 'Home'
                     const away = e.meta?.away?.name || 'Away'
@@ -598,7 +630,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                     const type = String(e.meta?.type || '')
                     const side = type === 'goal' ? (e.meta?.side === 'home' ? t('goals_side_home') : (e.meta?.side === 'away' ? t('goals_side_away') : '')) : ''
                     return (
-                      <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                      <div key={idx} className="evt-chip" style={{ display: (bannerMeasured && idx >= visibleBannerCount) ? 'none' : 'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
                         <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
                         <div className="muted small" style={{ opacity:0.85, textOverflow:'ellipsis', overflow:'hidden' }}><strong>{lg}</strong></div>
                         <div style={{ fontSize:13 }}>
@@ -1592,16 +1624,33 @@ function CopyBtn({ text }: { text: string }) {
 
 function GoalsCard({ chainKey, events, loading }: { chainKey: 'base'|'baseSepolia', events: Array<{ time:number, value:number, meta:any }>, loading: boolean }) {
   const { t } = useI18n()
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+  const total = Array.isArray(events) ? events.length : 0
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  useEffect(() => {
+    // Clamp page if events length changed
+    if (page > totalPages) setPage(totalPages)
+  }, [totalPages])
+  const start = (page - 1) * pageSize
+  const current = (Array.isArray(events) ? events : []).slice(start, start + pageSize)
   // Use shared sportEmoji helper for consistent mapping
   return (
     <div className="card">
-      <div className="card-header"><h3>{t('goals_title')}</h3></div>
+      <div className="card-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <h3>{t('goals_title')}</h3>
+        <div className="segmented" style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <button className="seg" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1, p-1))}>‹</button>
+          <span className="muted small">{page} / {totalPages}</span>
+          <button className="seg" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages, p+1))}>›</button>
+        </div>
+      </div>
       <div className="card-body">
-        {!events.length && !loading ? (
+        {!current.length && !loading ? (
           <div className="muted">{t('goals_none')}</div>
         ) : (
           <div className="list">
-            {events.map((e, idx) => {
+            {current.map((e, idx) => {
               const dt = new Date((e.time||0)*1000).toLocaleString()
               const lg = e.meta?.league || '—'
               const home = e.meta?.home?.name || 'Home'

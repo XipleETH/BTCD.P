@@ -3,7 +3,7 @@ import { verifyMessage, getAddress } from 'viem'
 
 export const config = { runtime: 'edge' }
 
-// GET  /api/lab-proposals               -> list proposals (newest first)
+// GET  /api/lab-proposals               -> list proposals (most votes first)
 // POST /api/lab-proposals { ...fields } -> create a proposal
 export default async function handler(req: Request): Promise<Response> {
   try {
@@ -28,8 +28,7 @@ export default async function handler(req: Request): Promise<Response> {
           }
         }
       }
-      // newest first
-      items.sort((a,b) => Number(b?.ts||0) - Number(a?.ts||0))
+  // we'll sort after overlaying votes
 
       // Optional: mark which proposals this address already voted
       const addrQ = (u.searchParams.get('address') || '').toString().trim()
@@ -50,6 +49,14 @@ export default async function handler(req: Request): Promise<Response> {
           }
         }))
       }
+
+      // Sort by votes desc; tie-breaker by timestamp desc
+      items.sort((a,b) => {
+        const va = Number(a?.votes || 0)
+        const vb = Number(b?.votes || 0)
+        if (vb !== va) return vb - va
+        return Number(b?.ts || 0) - Number(a?.ts || 0)
+      })
 
       if (debug) {
         let host = ''

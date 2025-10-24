@@ -701,14 +701,14 @@ function AppInner({ routeMarket, isLab }: { routeMarket: 'btcd'|'random'|'locala
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider initialChain={baseSepolia}>
-          <AppContent market={market} />
+          <AppContent market={market} isLab={isLab} />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   )
 }
 
-function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
+function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', isLab?: boolean }) {
   const [lang, setLang] = useState<Lang>(() => {
     try { return (localStorage.getItem('btcd:ui:lang') as Lang) === 'es' ? 'es' : 'en' } catch { return 'en' }
   })

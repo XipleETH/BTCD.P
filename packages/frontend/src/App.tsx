@@ -13,8 +13,8 @@ const translations: Record<Lang, Record<string, string>> = {
   es: {
     ui_network_live: 'Perps en Vivo',
     ui_network_test: 'Perps de Prueba',
-  ui_perps_lab: "Perps' Lab",
-  lab_title: "Perps' Lab",
+  ui_perps_lab: "Perps’ Lab",
+  lab_title: "Perps’ Lab",
   lab_form_name: 'Nombre',
   lab_form_desc: 'Descripción breve (cómo funciona)',
   lab_form_up: 'Cómo sube la vela',
@@ -124,8 +124,8 @@ const translations: Record<Lang, Record<string, string>> = {
   en: {
     ui_network_live: 'Live Perps',
     ui_network_test: 'Test Perps',
-  ui_perps_lab: "Perps' Lab",
-  lab_title: "Perps' Lab",
+  ui_perps_lab: "Perps’ Lab",
+  lab_title: "Perps’ Lab",
   lab_form_name: 'Name',
   lab_form_desc: 'Short description (how it works)',
   lab_form_up: 'How the candle goes up',

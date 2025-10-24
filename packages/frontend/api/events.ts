@@ -5,7 +5,7 @@ export const config = { runtime: 'edge' }
 // GET /api/events?chain=base-sepolia&market=localaway&limit=20&leagues=39,140
 export default async function handler(req: Request): Promise<Response> {
   try {
-    const { searchParams } = new URL(req.url)
+  const { searchParams } = new URL(req.url)
     const chain = (searchParams.get('chain') || 'base-sepolia').toLowerCase()
     const market = (searchParams.get('market') || 'btcd').toLowerCase()
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || '20')))
@@ -232,6 +232,24 @@ export default async function handler(req: Request): Promise<Response> {
       }
     }
 
+    // Default or debug output
+    if (searchParams.get('debug') === '1') {
+      try {
+        const counts: any = {}
+        const chains = Array.from(new Set([chain, chain === 'base' ? 'base-sepolia' : 'base']))
+        for (const ch of chains) {
+          const kLoc = `btcd:events:${ch}:localaway`
+          const kHom = `btcd:events:${ch}:homeaway`
+          const kLocS = `btcd:events:sticky:${ch}:localaway`
+          const kHomS = `btcd:events:sticky:${ch}:homeaway`
+          try { counts[`${kLoc}:len`] = await (Redis.fromEnv()).llen(kLoc) } catch {}
+          try { counts[`${kHom}:len`] = await (Redis.fromEnv()).llen(kHom) } catch {}
+          try { counts[`${kLocS}:len`] = ((await (Redis.fromEnv()).get<string>(kLocS))||'').length } catch {}
+          try { counts[`${kHomS}:len`] = ((await (Redis.fromEnv()).get<string>(kHomS))||'').length } catch {}
+        }
+        return json({ events: [], debug: { chain, market, keys: counts } })
+      } catch {}
+    }
     // Default: if nothing found, return empty array (UI will keep showing sticky/last-known).
     return json({ events: [] })
   } catch (e:any) {

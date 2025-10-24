@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useContext, createContext } from 'react'
+import { useEffect, useMemo, useState, useRef, useContext, createContext, Component } from 'react'
 import { http, WagmiProvider, useSwitchChain, useAccount } from 'wagmi'
 import { base, baseSepolia } from 'viem/chains'
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit'
@@ -1416,15 +1416,23 @@ export default function App() {
   )
 }
 
-function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [err, setErr] = useState<Error | null>(null)
-  // very small boundary to surface runtime errors
-  if (err) return <div className="error" style={{ padding: 12 }}>Error: {err.message}</div>
-  try {
-    return <>{children}</>
-  } catch (e: any) {
-    setErr(e)
-    return null
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error: any, info: any) {
+    try { console.error('App error:', error, info) } catch {}
+  }
+  render() {
+    if (this.state.hasError) {
+      const msg = this.state?.error?.message || String(this.state.error || 'Unknown error')
+      return <div className="error" style={{ padding: 12 }}>Error: {msg}</div>
+    }
+    return this.props.children as any
   }
 }
 

@@ -90,7 +90,7 @@ export default async function handler(req: Request): Promise<Response> {
           const prev = (await getLast('basketball', id)) || { home: totHome, away: totAway }
           const dHome = Math.max(0, totHome - prev.home)
           const dAway = Math.max(0, totAway - prev.away)
-          const netPct = (dHome - dAway) * 0.00001 // 0.001%
+          const netPct = (dHome - dAway) * 0.0001 // 0.01%
           await setLast('basketball', id, totHome, totAway)
           if (dHome || dAway) {
             items.push({ ts: nowSec, sport: 'basketball', fixtureId: id, league: g?.league?.name || g?.country?.name, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct })
@@ -119,7 +119,7 @@ export default async function handler(req: Request): Promise<Response> {
           const prev = (await getLast('volleyball', id)) || { home: totHome, away: totAway }
           const dHome = Math.max(0, totHome - prev.home)
           const dAway = Math.max(0, totAway - prev.away)
-          const netPct = (dHome - dAway) * 0.00001 // 0.001%
+          const netPct = (dHome - dAway) * 0.0001 // 0.01%
           await setLast('volleyball', id, totHome, totAway)
           if (dHome || dAway) {
             items.push({ ts: nowSec, sport: 'volleyball', fixtureId: id, league: g?.league?.name || g?.country?.name, home: { name: g?.teams?.home?.name }, away: { name: g?.teams?.away?.name }, score: { home: totHome, away: totAway }, delta: { home: dHome, away: dAway }, deltaPct: netPct })

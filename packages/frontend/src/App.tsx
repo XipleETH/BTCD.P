@@ -868,7 +868,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
           <div className={`network-menu ${isLab ? 'lab-mode' : ''}`} style={{ marginTop: 2 }}>
             <div className="segmented">
               <button
-                className={(chain==='base' ? 'seg active' : 'seg')}
+                className={(isLab ? 'seg' : (chain==='base' ? 'seg active' : 'seg'))}
                 onClick={async ()=>{
                   try { localStorage.setItem('btcd:ui:chain','base') } catch {}
                   setUiChain('base')
@@ -880,7 +880,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
                 }}
               >{t('ui_network_live')}</button>
               <button
-                className={(chain==='baseSepolia' ? 'seg active' : 'seg')}
+                className={(isLab ? 'seg' : (chain==='baseSepolia' ? 'seg active' : 'seg'))}
                 onClick={async ()=>{
                   try { localStorage.setItem('btcd:ui:chain','baseSepolia') } catch {}
                   setUiChain('baseSepolia')

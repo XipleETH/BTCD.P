@@ -31,6 +31,7 @@ const translations: Record<Lang, Record<string, string>> = {
   lab_empty: 'No hay propuestas aún.',
   lab_votes: 'Votos',
   lab_vote_btn: 'Votar',
+  lab_voted: 'Votado',
   lab_switch_to_sepolia: 'Cambia a Base Sepolia para votar',
   lab_list_up: 'Sube',
   lab_list_down: 'Baja',
@@ -142,6 +143,7 @@ const translations: Record<Lang, Record<string, string>> = {
   lab_empty: 'No proposals yet.',
   lab_votes: 'Votes',
   lab_vote_btn: 'Vote',
+  lab_voted: 'Voted',
   lab_switch_to_sepolia: 'Switch to Base Sepolia to vote',
   lab_list_up: 'Up',
   lab_list_down: 'Down',
@@ -1785,12 +1787,14 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [formula, setFormula] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [page, setPage] = useState(1)
+  const [votedIds, setVotedIds] = useState<Record<string, true>>({})
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
 
   const proposalsQ = useQuery({
-    queryKey: ['lab-proposals'],
+    queryKey: ['lab-proposals', address || ''],
     queryFn: async () => {
-      const r = await fetch(`${baseUrl}/api/lab-proposals`, { cache: 'no-store' })
+      const url = `${baseUrl}/api/lab-proposals${address ? `?address=${address}` : ''}`
+      const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) {
         let txt = ''
         try { txt = await r.text() } catch {}
@@ -1851,7 +1855,14 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
         alert(lang==='es' ? 'Firma rechazada' : 'Signature rejected')
         return
       }
-      await fetch(`${baseUrl}/api/lab-vote`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, address, message, signature }) })
+      const res = await fetch(`${baseUrl}/api/lab-vote`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, address, message, signature }) })
+      if (res.ok) {
+        // Optimistic: mark as voted so UI shows immediately
+        setVotedIds(prev => ({ ...prev, [id]: true }))
+      } else {
+        const txt = await res.text().catch(()=> '')
+        alert((lang==='es' ? 'No se pudo votar: ' : 'Failed to vote: ') + (txt || res.status))
+      }
       proposalsQ.refetch()
     } catch {}
   }
@@ -1949,7 +1960,14 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
                           <div style={{ width: 140, textAlign:'right' }}>
                             <div className="muted small">{t('lab_votes')}</div>
                             <div style={{ fontSize:18, marginBottom:8 }}><strong>{Number(p.votes||0)}</strong></div>
-                            <button className="btn sm" disabled={!isConnected} onClick={()=>vote(p.id)}>{t('lab_vote_btn')}</button>
+                            {(() => {
+                              const already = Boolean((p as any).hasVoted) || Boolean(votedIds[p.id])
+                              return (
+                                <button className={already ? 'btn sm disabled' : 'btn sm'} disabled={!isConnected || already} onClick={()=>vote(p.id)}>
+                                  {already ? t('lab_voted') : t('lab_vote_btn')}
+                                </button>
+                              )
+                            })()}
                           </div>
                         </div>
                       </div>

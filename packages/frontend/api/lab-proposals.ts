@@ -30,6 +30,20 @@ export default async function handler(req: Request): Promise<Response> {
       }
       // newest first
       items.sort((a,b) => Number(b?.ts||0) - Number(a?.ts||0))
+
+      // Optional: mark which proposals this address already voted
+      const addrQ = (u.searchParams.get('address') || '').toString().trim()
+      const addrLower = /^0x[0-9a-fA-F]{40}$/.test(addrQ) ? addrQ.toLowerCase() : ''
+      if (addrLower && items.length) {
+        // For each item, check set membership
+        await Promise.all(items.map(async (p) => {
+          try {
+            const isMember: any = await redis.sismember(`btcd:lab:proposal:${p.id}:voters`, addrLower)
+            p.hasVoted = Boolean(Number(isMember))
+          } catch { p.hasVoted = false }
+        }))
+      }
+
       if (debug) {
         let host = ''
         try { const h = new URL(process.env.UPSTASH_REDIS_REST_URL || ''); host = h.host } catch {}

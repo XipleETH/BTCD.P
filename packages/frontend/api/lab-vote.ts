@@ -22,8 +22,9 @@ export default async function handler(req: Request): Promise<Response> {
     if (!id || !/^0x[0-9a-fA-F]{40}$/.test(address)) return json({ error: 'invalid id/address' }, 400)
     // Require valid signature: one signed message per vote
     if (!message || !signature) return json({ error: 'missing signature' }, 401)
+    let addrCk: `0x${string}`
     try {
-      const addrCk = getAddress(address)
+      addrCk = getAddress(address) as `0x${string}`
       const ok = await verifyMessage({ address: addrCk, message, signature })
       if (!ok) return json({ error: 'invalid signature' }, 401)
     } catch {
@@ -34,23 +35,24 @@ export default async function handler(req: Request): Promise<Response> {
     if (!raw) return json({ error: 'proposal not found' }, 404)
 
     // Ensure one vote per address
-  const added = await redis.sadd(`btcd:lab:proposal:${id}:voters`, address.toLowerCase())
-    if (added === 1) {
+  const addrLower = String(addrCk).toLowerCase()
+  const added = await redis.sadd(`btcd:lab:proposal:${id}:voters`, addrLower)
+    if (Number(added) === 1) {
       // first time this address votes -> increment votes
-      try {
-        const p = JSON.parse(raw)
-        const votes = Number(p?.votes || 0) + 1
-        const updated = { ...p, votes }
-        await redis.set(`btcd:lab:proposal:${id}`, JSON.stringify(updated))
-      } catch {}
+      const p = JSON.parse(raw)
+      const votes = Number(p?.votes || 0) + 1
+      const updated = { ...p, votes }
+      // If this write fails (e.g., read-only token), surface an error instead of silently succeeding
+      const ok = await redis.set(`btcd:lab:proposal:${id}`, JSON.stringify(updated)).then(()=>true).catch(()=>false)
+      if (!ok) return json({ error: 'failed to update votes (write denied?)' }, 500)
     }
 
     const raw2 = await redis.get<string>(`btcd:lab:proposal:${id}`)
     try {
       const p2 = raw2 ? JSON.parse(raw2) : null
-      return json({ ok: true, proposal: p2 })
+      return json({ ok: true, proposal: p2, hasVoted: true })
     } catch {
-      return json({ ok: true })
+      return json({ ok: true, hasVoted: true })
     }
   } catch (e:any) {
     return json({ error: e?.message || String(e) }, 500)

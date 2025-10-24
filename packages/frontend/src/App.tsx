@@ -13,8 +13,8 @@ const translations: Record<Lang, Record<string, string>> = {
   es: {
     ui_network_live: 'Perps en Vivo',
     ui_network_test: 'Perps de Prueba',
-  ui_perps_lab: 'Perps Lab',
-  lab_title: 'Perps Lab',
+  ui_perps_lab: "Perps' Lab",
+  lab_title: "Perps' Lab",
   lab_form_name: 'Nombre',
   lab_form_desc: 'Descripción breve (cómo funciona)',
   lab_form_up: 'Cómo sube la vela',
@@ -124,8 +124,8 @@ const translations: Record<Lang, Record<string, string>> = {
   en: {
     ui_network_live: 'Live Perps',
     ui_network_test: 'Test Perps',
-  ui_perps_lab: 'Perps Lab',
-  lab_title: 'Perps Lab',
+  ui_perps_lab: "Perps' Lab",
+  lab_title: "Perps' Lab",
   lab_form_name: 'Name',
   lab_form_desc: 'Short description (how it works)',
   lab_form_up: 'How the candle goes up',
@@ -875,6 +875,8 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
                   if (isConnected) {
                     try { await switchChainAsync?.({ chainId: base.id }) } catch {}
                   }
+                  // If currently in Lab, exit to charts when switching network
+                  if (isLab) { try { window.location.hash = '#btcd' } catch {} }
                 }}
               >{t('ui_network_live')}</button>
               <button
@@ -885,13 +887,12 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
                   if (isConnected) {
                     try { await switchChainAsync?.({ chainId: baseSepolia.id }) } catch {}
                   }
+                  // If currently in Lab, exit to charts when switching network
+                  if (isLab) { try { window.location.hash = '#btcd' } catch {} }
                 }}
               >{t('ui_network_test')}</button>
             </div>
             <a href="#lab" className="btn sm" style={{ marginLeft: 8 }}>{t('ui_perps_lab')}</a>
-            {isLab && (
-              <a href="#btcd" className="btn sm" style={{ marginLeft: 8 }}>{lang==='es'?'Mercados':'Markets'}</a>
-            )}
           </div>
           {/* Third row: Page selector below network menu (hidden when on Lab page) */}
           <div className="network-switcher" style={{ marginTop: 4 }}>

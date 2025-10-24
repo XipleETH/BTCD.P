@@ -34,13 +34,20 @@ export default async function handler(req: Request): Promise<Response> {
       // Optional: mark which proposals this address already voted
       const addrQ = (u.searchParams.get('address') || '').toString().trim()
       const addrLower = /^0x[0-9a-fA-F]{40}$/.test(addrQ) ? addrQ.toLowerCase() : ''
-      if (addrLower && items.length) {
-        // For each item, check set membership
+      if (items.length) {
         await Promise.all(items.map(async (p) => {
+          // Overlay durable votes counter if present
           try {
-            const isMember: any = await redis.sismember(`btcd:lab:proposal:${p.id}:voters`, addrLower)
-            p.hasVoted = Boolean(Number(isMember))
-          } catch { p.hasVoted = false }
+            const v = await redis.get<number>(`btcd:lab:proposal:${p.id}:votes`)
+            if (typeof v === 'number') p.votes = v
+          } catch {}
+          // For address-specific vote mark
+          if (addrLower) {
+            try {
+              const isMember: any = await redis.sismember(`btcd:lab:proposal:${p.id}:voters`, addrLower)
+              p.hasVoted = Boolean(Number(isMember))
+            } catch { p.hasVoted = false }
+          }
         }))
       }
 
@@ -53,9 +60,13 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     if (method === 'POST') {
-      const ct = (req.headers.get('content-type') || '').toLowerCase()
-      if (!ct.includes('application/json')) return json({ error: 'invalid content-type' }, 400)
-      const body = await req.json() as any
+      // Lenient parsing: accept raw text and parse JSON
+      let body: any = null
+      try {
+        const txt = await req.text()
+        try { body = JSON.parse(txt) } catch { body = null }
+        if (!body || typeof body !== 'object') return json({ error: 'invalid json body' }, 400)
+      } catch { return json({ error: 'invalid body' }, 400) }
       const name = (body?.name || '').toString().trim()
       const description = (body?.description || '').toString().trim()
       const upDesc = (body?.upDesc || '').toString().trim()
@@ -94,6 +105,8 @@ export default async function handler(req: Request): Promise<Response> {
       }
       await redis.set(`btcd:lab:proposal:${id}`, JSON.stringify(rec))
       await redis.lpush('btcd:lab:proposals', id)
+      // Initialize durable votes counter
+      try { await redis.set(`btcd:lab:proposal:${id}:votes`, 0) } catch {}
       return json({ ok: true, id })
     }
 

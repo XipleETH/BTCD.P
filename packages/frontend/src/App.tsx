@@ -1793,7 +1793,7 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const proposalsQ = useQuery({
     queryKey: ['lab-proposals', address || ''],
     queryFn: async () => {
-      const url = `${baseUrl}/api/lab-proposals${address ? `?address=${address}` : ''}`
+      const url = `${baseUrl}/api/lab-proposals${address ? `?address=${encodeURIComponent(address)}` : ''}`
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) {
         let txt = ''

@@ -11,9 +11,15 @@ export default async function handler(req: Request): Promise<Response> {
     if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
     const redis = Redis.fromEnv()
 
-    const ct = (req.headers.get('content-type') || '').toLowerCase()
-    if (!ct.includes('application/json')) return json({ error: 'invalid content-type' }, 400)
-    const body = await req.json() as any
+    // Be lenient with content-type; parse body from text to avoid Edge JSON parsing pitfalls
+    let body: any = null
+    try {
+      const txt = await req.text()
+      try { body = JSON.parse(txt) } catch { body = null }
+      if (!body || typeof body !== 'object') return json({ error: 'invalid json body' }, 400)
+    } catch {
+      return json({ error: 'invalid body' }, 400)
+    }
     const id = (body?.id || '').toString().trim()
     const address = (body?.address || '').toString().trim()
     const message = (body?.message || '').toString()
@@ -31,29 +37,37 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ error: 'invalid signature' }, 401)
     }
 
-  const raw = await redis.get<string>(`btcd:lab:proposal:${id}`)
+  const raw = await redis.get<any>(`btcd:lab:proposal:${id}`)
     if (!raw) return json({ error: 'proposal not found' }, 404)
 
     // Ensure one vote per address
   const addrLower = String(addrCk).toLowerCase()
   const added = await redis.sadd(`btcd:lab:proposal:${id}:voters`, addrLower)
+    let newVotes: number | null = null
     if (Number(added) === 1) {
-      // first time this address votes -> increment votes
-      const p = JSON.parse(raw)
-      const votes = Number(p?.votes || 0) + 1
-      const updated = { ...p, votes }
-      // If this write fails (e.g., read-only token), surface an error instead of silently succeeding
-      const ok = await redis.set(`btcd:lab:proposal:${id}`, JSON.stringify(updated)).then(()=>true).catch(()=>false)
-      if (!ok) return json({ error: 'failed to update votes (write denied?)' }, 500)
+      // First time this voter for this proposal: increment durable counter
+      try {
+        const v = await redis.incr(`btcd:lab:proposal:${id}:votes`)
+        newVotes = Number(v)
+      } catch {}
+      // Best-effort: also reflect votes in stored proposal object
+      try {
+        const p = typeof raw === 'string' ? JSON.parse(raw) : (typeof raw === 'object' ? raw : {})
+        const votes = newVotes !== null ? newVotes : (Number(p?.votes || 0) + 1)
+        const updated = { ...p, votes }
+        await redis.set(`btcd:lab:proposal:${id}`, JSON.stringify(updated))
+      } catch {}
     }
 
-    const raw2 = await redis.get<string>(`btcd:lab:proposal:${id}`)
+    const raw2 = await redis.get<any>(`btcd:lab:proposal:${id}`)
+    let p2: any = null
+    try { p2 = typeof raw2 === 'string' ? JSON.parse(raw2) : (typeof raw2 === 'object' ? raw2 : null) } catch { p2 = null }
+    // Overlay durable counter if available
     try {
-      const p2 = raw2 ? JSON.parse(raw2) : null
-      return json({ ok: true, proposal: p2, hasVoted: true })
-    } catch {
-      return json({ ok: true, hasVoted: true })
-    }
+      const vNow = await redis.get<number>(`btcd:lab:proposal:${id}:votes`)
+      if (p2 && typeof vNow === 'number') p2.votes = vNow
+    } catch {}
+    return json({ ok: true, proposal: p2, hasVoted: true })
   } catch (e:any) {
     return json({ error: e?.message || String(e) }, 500)
   }

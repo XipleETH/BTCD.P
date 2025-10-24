@@ -857,7 +857,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
 
   return (
     <I18nContext.Provider value={{ lang, t }}>
-    <div className={"container " + (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway'))}>
+  <div className={"container " + (isLab ? 'market-lab' : (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway')))}>
       <header className="header">
         <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
           {/* Top row: Brand only */}
@@ -865,7 +865,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
             <div className="brand">Perp-it</div>
           </div>
           {/* Second row: Network menu under title */}
-          <div className="network-menu" style={{ marginTop: 2 }}>
+          <div className={`network-menu ${isLab ? 'lab-mode' : ''}`} style={{ marginTop: 2 }}>
             <div className="segmented">
               <button
                 className={(chain==='base' ? 'seg active' : 'seg')}
@@ -892,7 +892,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
                 }}
               >{t('ui_network_test')}</button>
             </div>
-            <a href="#lab" className="btn sm" style={{ marginLeft: 8 }}>{t('ui_perps_lab')}</a>
+            <a href="#lab" className={"btn sm lab-btn " + (isLab ? 'active' : '')} style={{ marginLeft: 8 }}>{t('ui_perps_lab')}</a>
           </div>
           {/* Third row: Page selector below network menu (hidden when on Lab page) */}
           <div className="network-switcher" style={{ marginTop: 4 }}>

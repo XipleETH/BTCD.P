@@ -95,6 +95,13 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .btn.warning { background: #3a2b12; color: #ffe9b3; border-color: #5c430f; }
 .btn.sm { padding: 6px 10px; font-size: 12px; }
 
+/* Lab button: transparent when not active, radioactive green when active */
+.lab-btn { background: transparent !important; border-color: transparent !important; color: var(--muted) !important; }
+.lab-btn.active { background: #103024 !important; color: #d9ffe6 !important; border-color: #27c37b !important; box-shadow: 0 0 0 1px rgba(39,195,123,0.4) inset, 0 0 18px rgba(39,195,123,0.25); }
+
+/* In Lab mode, keep Live/Test segmented buttons transparent even if active */
+.lab-mode .seg.active { background: transparent; color: var(--muted); box-shadow: none; }
+
 .muted { color: var(--muted); }
 .warn { color: #fbbf24; }
 .error { color: #fb7185; }
@@ -133,6 +140,28 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 }
 
 /* Market themed variants (keep overall bg; recolor frames/buttons) */
+.market-lab .card { background: #0f1f18; border-color: #27c37b; }
+.market-lab .card-header { border-bottom-color: #27c37b; }
+.market-lab .segmented { border-color: #27c37b; }
+.market-lab .seg { border-right-color: #27c37b; }
+.market-lab .seg.active { background: #103024; border-color: #27c37b; box-shadow: inset 0 0 0 1px rgba(39,195,123,0.25); }
+.market-lab .tab { border-color: #27c37b; }
+.market-lab .tab.active { background: #103024; border-color: #35e392; }
+.market-lab .input { background: #0b1612; border-color: #27c37b; }
+.market-lab .btn { background: #103024; border-color: #27c37b; }
+.market-lab .btn:hover { background: #133828; }
+.market-lab .btn.primary { background: #19d678; border-color: #15b968; color: #072016; }
+.market-lab .btn.primary:hover { background: #15b968; }
+.market-lab .btn.danger { background: #2a1e1e; border-color: #5b3a3a; color: #ffd6d1; }
+.market-lab .btn.warning { background: #1a2f26; border-color: #27c37b; color: #d9ffe6; }
+.market-lab .stat { background: #0b1612; border-color: #27c37b; }
+.market-lab .code-row { background: #0b1612; border-color: #27c37b; }
+/* Brand gradient overrides for Lab */
+.market-lab .brand { --brand-start: #19d678; --brand-end: #7fff00; }
+/* Long/Short active painting per page (Lab) */
+.market-lab .long-btn.active { background: rgba(39,195,123,0.18); border-color: rgba(39,195,123,0.65); color: #e7fdf2; }
+.market-lab .short-btn.active { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.6); color: #ffe5e5; }
+.market-lab .chart { box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 12px 28px rgba(0,0,0,0.4), 0 0 24px rgba(25,214,120,0.18); }
 .market-btcd .card { background: #1a1410; border-color: #6b3d1f; }
 .market-btcd .card-header { border-bottom-color: #6b3d1f; }
 .market-btcd .segmented { border-color: #6b3d1f; }

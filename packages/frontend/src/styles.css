@@ -122,7 +122,8 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 @media (max-width: 980px) {
   .main-grid { grid-template-columns: 1fr; }
   .brand { font-size: 28px; }
-  .header { flex-direction: column; align-items: stretch; gap: 8px; }
+  /* Keep header as a row so Brand (left) and Wallet (right) share the top line */
+  .header { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
   .header-right { align-items: flex-end; }
   .network-switcher, .network-menu { flex-wrap: wrap; }
   .seg { padding: 8px 10px; }

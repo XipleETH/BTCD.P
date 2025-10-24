@@ -860,8 +860,8 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
   <div className={"container " + (isLab ? 'market-lab' : (market === 'btcd' ? 'market-btcd' : (market === 'random' ? 'market-random' : 'market-localaway')))}>
       <header className="header">
         <div className="header-left" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
-          {/* Top row: Brand only */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', gap:8, flexWrap:'wrap' }}>
+          {/* Top row: Brand only (no fixed width so wallet can align right on the same row) */}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <div className="brand">Perp-it</div>
           </div>
           {/* Second row: Network menu under title */}

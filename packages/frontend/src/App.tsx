@@ -13,6 +13,29 @@ const translations: Record<Lang, Record<string, string>> = {
   es: {
     ui_network_live: 'Perps en Vivo',
     ui_network_test: 'Perps de Prueba',
+  ui_perps_lab: 'Perps Lab',
+  lab_title: 'Perps Lab',
+  lab_form_name: 'Nombre',
+  lab_form_desc: 'Descripción breve (cómo funciona)',
+  lab_form_up: 'Cómo sube la vela',
+  lab_form_down: 'Cómo baja la vela',
+  lab_form_api_url: 'API (URL)',
+  lab_form_api_cost: 'Costo de la API',
+  lab_api_cost_none: '—',
+  lab_api_cost_free: 'Gratis',
+  lab_api_cost_paid: 'De pago',
+  lab_form_formula: 'Fórmula / Ecuación',
+  lab_submit: 'Proponer',
+  lab_list_title: 'Propuestas',
+  lab_loading: 'Cargando…',
+  lab_empty: 'No hay propuestas aún.',
+  lab_votes: 'Votos',
+  lab_vote_btn: 'Votar',
+  lab_switch_to_sepolia: 'Cambia a Base Sepolia para votar',
+  lab_list_up: 'Sube',
+  lab_list_down: 'Baja',
+  lab_list_api: 'API',
+  lab_list_formula: 'Fórmula',
     chart_loading_events: 'Cargando eventos…',
     chart_showing_last: 'Mostrando últimos registrados',
     chart_no_events: 'Sin eventos recientes',
@@ -101,6 +124,29 @@ const translations: Record<Lang, Record<string, string>> = {
   en: {
     ui_network_live: 'Live Perps',
     ui_network_test: 'Test Perps',
+  ui_perps_lab: 'Perps Lab',
+  lab_title: 'Perps Lab',
+  lab_form_name: 'Name',
+  lab_form_desc: 'Short description (how it works)',
+  lab_form_up: 'How the candle goes up',
+  lab_form_down: 'How the candle goes down',
+  lab_form_api_url: 'API (URL)',
+  lab_form_api_cost: 'API cost',
+  lab_api_cost_none: '—',
+  lab_api_cost_free: 'Free',
+  lab_api_cost_paid: 'Paid',
+  lab_form_formula: 'Formula / Equation',
+  lab_submit: 'Submit',
+  lab_list_title: 'Proposals',
+  lab_loading: 'Loading…',
+  lab_empty: 'No proposals yet.',
+  lab_votes: 'Votes',
+  lab_vote_btn: 'Vote',
+  lab_switch_to_sepolia: 'Switch to Base Sepolia to vote',
+  lab_list_up: 'Up',
+  lab_list_down: 'Down',
+  lab_list_api: 'API',
+  lab_list_formula: 'Formula',
     chart_loading_events: 'Loading events…',
     chart_showing_last: 'Showing last recorded',
     chart_no_events: 'No recent events',
@@ -639,7 +685,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
 
 const queryClient = new QueryClient()
 
-function AppInner({ routeMarket }: { routeMarket: 'btcd'|'random'|'localaway' }) {
+function AppInner({ routeMarket, isLab }: { routeMarket: 'btcd'|'random'|'localaway', isLab?: boolean }) {
   const market: 'btcd'|'random'|'localaway' = routeMarket
   const config = useMemo(() => getDefaultConfig({
     appName: 'Perp-it',
@@ -768,14 +814,17 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
                 }}
               >{t('ui_network_test')}</button>
             </div>
+            <a href="#lab" className="btn sm" style={{ marginLeft: 8 }}>{t('ui_perps_lab')}</a>
           </div>
-          {/* Third row: Page selector below network menu */}
+          {/* Third row: Page selector below network menu (hidden when on Lab page) */}
           <div className="network-switcher" style={{ marginTop: 4 }}>
-            <div className="segmented">
-              <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
-              <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
-              <a href="#localaway" className={market==='localaway'?'seg active':'seg'}>Home/Away</a>
-            </div>
+            {!isLab && (
+              <div className="segmented">
+                <a href="#btcd" className={market==='btcd'?'seg active':'seg'}>BTC.D</a>
+                <a href="#random" className={market==='random'?'seg active':'seg'}>Random</a>
+                <a href="#homeaway" className={market==='localaway'?'seg active':'seg'}>Home/Away</a>
+              </div>
+            )}
           </div>
         </div>
         {/* Right side: Wallet on top, language buttons below (right aligned) */}
@@ -791,34 +840,40 @@ function AppContent({ market }: { market: 'btcd'|'random'|'localaway' }) {
       </header>
 
       <main className="main">
-        <section className="main-top">
-          <DominanceChart
-            oracleAddress={oracleAddress}
-            chainKey={chain}
-            market={market}
-            localawayEvents={market==='localaway' ? eventsLocalAway : undefined}
-            localawayLoading={market==='localaway' ? loadingLocalAway : undefined}
-            randomEvents={market==='random' ? eventsRandom : undefined}
-            randomLoading={market==='random' ? loadingRandom : undefined}
-          />
-        </section>
+        {isLab ? (
+          <PerpsLab chainKey={chain} />
+        ) : (
+          <>
+            <section className="main-top">
+              <DominanceChart
+                oracleAddress={oracleAddress}
+                chainKey={chain}
+                market={market}
+                localawayEvents={market==='localaway' ? eventsLocalAway : undefined}
+                localawayLoading={market==='localaway' ? loadingLocalAway : undefined}
+                randomEvents={market==='random' ? eventsRandom : undefined}
+                randomLoading={market==='random' ? loadingRandom : undefined}
+              />
+            </section>
 
-        <section className="main-grid">
-          <div className="col">
-            <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
-            <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
-            <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
-          </div>
-          <div className="col">
-            <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
-            {market === 'random' && (
-              <RandomCard chainKey={chain} oracleAddress={oracleAddress} items={eventsRandom} loading={loadingRandom} />
-            )}
-            {market === 'localaway' && (
-              <GoalsCard chainKey={chain} events={eventsLocalAway} loading={loadingLocalAway} />
-            )}
-          </div>
-        </section>
+            <section className="main-grid">
+              <div className="col">
+                <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
+                <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
+                <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />
+              </div>
+              <div className="col">
+                <PositionCard perpsAddress={perpsAddress} oracleAddress={oracleAddress} market={market} chainKey={chain} />
+                {market === 'random' && (
+                  <RandomCard chainKey={chain} oracleAddress={oracleAddress} items={eventsRandom} loading={loadingRandom} />
+                )}
+                {market === 'localaway' && (
+                  <GoalsCard chainKey={chain} events={eventsLocalAway} loading={loadingLocalAway} />
+                )}
+              </div>
+            </section>
+          </>
+        )}
       </main>
     </div>
     </I18nContext.Provider>
@@ -1332,24 +1387,31 @@ function OraclePrice({ oracleAddress, market, chainKey }: { oracleAddress: strin
 }
 
 export default function App() {
-  // Tiny hash router: #btcd (default) or #random
-  const [route, setRoute] = useState<'btcd' | 'random' | 'localaway'>(() => {
+  // Tiny hash router: supports #btcd (default), #random, #homeaway/#localaway, and #lab
+  const [route, setRoute] = useState<'btcd' | 'random' | 'localaway' | 'lab'>(() => {
     const h = (typeof window !== 'undefined' ? window.location.hash : '') || ''
-    const hv = h.replace('#', '')
-    return hv === 'random' ? 'random' : (hv === 'localaway' ? 'localaway' : 'btcd')
+    const hv = h.replace('#', '').toLowerCase()
+    if (hv === 'random') return 'random'
+    if (hv === 'homeaway' || hv === 'localaway') return 'localaway'
+    if (hv === 'lab' || hv === 'perpslab') return 'lab'
+    return 'btcd'
   })
   useEffect(() => {
     const onHash = () => {
       const h = window.location.hash || ''
-      const hv = h.replace('#', '')
-      setRoute(hv === 'random' ? 'random' : (hv === 'localaway' ? 'localaway' : 'btcd'))
+      const hv = h.replace('#', '').toLowerCase()
+      setRoute(
+        hv === 'random' ? 'random' :
+        (hv === 'homeaway' || hv === 'localaway') ? 'localaway' :
+        (hv === 'lab' || hv === 'perpslab') ? 'lab' : 'btcd'
+      )
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
   return (
     <ErrorBoundary>
-      <AppInner routeMarket={route} />
+      <AppInner routeMarket={route === 'lab' ? 'btcd' : route} isLab={route === 'lab'} />
     </ErrorBoundary>
   )
 }
@@ -1603,6 +1665,149 @@ function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'ba
             })}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Perps Lab: propose new perps and vote
+function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
+  const { t, lang } = useI18n()
+  const { address, isConnected } = useAccount()
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [upDesc, setUpDesc] = useState('')
+  const [downDesc, setDownDesc] = useState('')
+  const [apiUrl, setApiUrl] = useState('')
+  const [apiCost, setApiCost] = useState<'free'|'paid'|'none'>('none')
+  const [formula, setFormula] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
+
+  const proposalsQ = useQuery({
+    queryKey: ['lab-proposals'],
+    queryFn: async () => {
+      const r = await fetch(`${baseUrl}/api/lab-proposals`, { cache: 'no-store' })
+      if (!r.ok) throw new Error('failed')
+      const j = await r.json()
+      return Array.isArray(j?.proposals) ? j.proposals as any[] : []
+    },
+    refetchInterval: 30000,
+  })
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim() || !description.trim() || !upDesc.trim() || !downDesc.trim() || !formula.trim()) return
+    try {
+      setSubmitting(true)
+      const r = await fetch(`${baseUrl}/api/lab-proposals`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, description, upDesc, downDesc, apiUrl, apiCost: apiCost==='none'?'':apiCost, formula, author: address || '' })
+      })
+      if (r.ok) {
+        setName(''); setDescription(''); setUpDesc(''); setDownDesc(''); setApiUrl(''); setApiCost('none'); setFormula('')
+        proposalsQ.refetch()
+      }
+    } finally { setSubmitting(false) }
+  }
+
+  const vote = async (id: string) => {
+    if (!address) return
+    if (chainKey !== 'baseSepolia') {
+      alert(lang==='es' ? 'Cambia a Base Sepolia para votar' : 'Switch to Base Sepolia to vote')
+      return
+    }
+    try {
+      await fetch(`${baseUrl}/api/lab-vote`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, address }) })
+      proposalsQ.refetch()
+    } catch {}
+  }
+
+  return (
+    <div className="grid" style={{ gap: 16 }}>
+      <div className="card">
+        <div className="card-header"><h3>{t('lab_title')}</h3></div>
+        <div className="card-body">
+          <form className="grid" style={{ gap: 12 }} onSubmit={onSubmit}>
+            <div className="field">
+              <label>{t('lab_form_name')}</label>
+              <input className="input" value={name} onChange={e=>setName(e.target.value)} placeholder={lang==='es' ? 'Nombre del perp' : 'Perp name'} />
+            </div>
+            <div className="field">
+              <label>{t('lab_form_desc')}</label>
+              <textarea className="input" value={description} onChange={e=>setDescription(e.target.value)} placeholder={lang==='es' ? 'Resumen del mecanismo' : 'Mechanism summary'} />
+            </div>
+            <div className="field">
+              <label>{t('lab_form_up')}</label>
+              <textarea className="input" value={upDesc} onChange={e=>setUpDesc(e.target.value)} placeholder={lang==='es' ? 'Describe la condición de subida' : 'Describe the upward condition'} />
+            </div>
+            <div className="field">
+              <label>{t('lab_form_down')}</label>
+              <textarea className="input" value={downDesc} onChange={e=>setDownDesc(e.target.value)} placeholder={lang==='es' ? 'Describe la condición de bajada' : 'Describe the downward condition'} />
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <div className="field" style={{ flex: 2 }}>
+                <label>{t('lab_form_api_url')}</label>
+                <input className="input" value={apiUrl} onChange={e=>setApiUrl(e.target.value)} placeholder="https://..." />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>{t('lab_form_api_cost')}</label>
+                <select className="input" value={apiCost} onChange={e=>setApiCost(e.target.value as any)}>
+                  <option value="none">{t('lab_api_cost_none')}</option>
+                  <option value="free">{t('lab_api_cost_free')}</option>
+                  <option value="paid">{t('lab_api_cost_paid')}</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>{t('lab_form_formula')}</label>
+              <textarea className="input" value={formula} onChange={e=>setFormula(e.target.value)} placeholder={lang==='es' ? 'Explica la ecuación requerida' : 'Explain the required equation'} />
+            </div>
+            <div>
+              <button className="btn" type="submit" disabled={submitting || !name.trim() || !description.trim() || !upDesc.trim() || !downDesc.trim() || !formula.trim()}>
+                {t('lab_submit')}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header"><h3>{t('lab_list_title')}</h3></div>
+        <div className="card-body">
+          {proposalsQ.isLoading ? (
+            <div className="muted">{t('lab_loading')}</div>
+          ) : (
+            <div className="list">
+              {(proposalsQ.data || []).map((p:any) => (
+                <div key={p.id} className="row" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+                      <strong>{p.name}</strong>
+                      <span className="muted small">{new Date((p.ts||0)*1000).toLocaleString()}</span>
+                    </div>
+                    <div className="muted" style={{ marginTop:4 }}>{p.description}</div>
+                    <div className="grid" style={{ gap:4, marginTop:8 }}>
+                      <div className="small"><strong>{t('lab_list_up')}:</strong> {p.upDesc}</div>
+                      <div className="small"><strong>{t('lab_list_down')}:</strong> {p.downDesc}</div>
+                      <div className="small"><strong>{t('lab_list_api')}:</strong> {p.apiUrl || '—'} {p.apiCost ? `(${p.apiCost})` : ''}</div>
+                      <div className="small"><strong>{t('lab_list_formula')}:</strong> <span style={{ whiteSpace:'pre-wrap' }}>{p.formula}</span></div>
+                    </div>
+                  </div>
+                  <div style={{ width: 140, textAlign:'right' }}>
+                    <div className="muted small">{t('lab_votes')}</div>
+                    <div style={{ fontSize:18, marginBottom:8 }}><strong>{Number(p.votes||0)}</strong></div>
+                    <button className="btn sm" disabled={!isConnected} onClick={()=>vote(p.id)}>{t('lab_vote_btn')}</button>
+                  </div>
+                </div>
+              ))}
+              {(!proposalsQ.data || proposalsQ.data.length===0) && (
+                <div className="muted">{t('lab_empty')}</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

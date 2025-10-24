@@ -336,7 +336,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
   const chartWrapRef = useRef<HTMLDivElement | null>(null)
   const bannerRef = useRef<HTMLDivElement | null>(null)
   const [bannerMeasured, setBannerMeasured] = useState(false)
-  const [visibleBannerCount, setVisibleBannerCount] = useState<number>(8)
+  const [visibleBannerCount, setVisibleBannerCount] = useState<number>(6)
   const containerId = useMemo(() => `chart_container_${market}`, [market])
 
   // Reset local state when switching markets to show a fresh chart
@@ -490,21 +490,21 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
     setOverlayTop(clamped)
   }, [livePrice, candles, tf])
 
-  // Recompute how many event chips fit in the banner without clipping
+  // Recompute how many event chips fit in the banner without clipping (desktop/mobile)
   useEffect(() => {
     if (market !== 'localaway') return
     setBannerMeasured(false)
+    const el = bannerRef.current
+    if (!el) return
     const recompute = () => {
       try {
-        const el = bannerRef.current
-        if (!el) return
         const containerWidth = el.clientWidth || 0
         const chips = Array.from(el.querySelectorAll('.evt-chip')) as HTMLElement[]
         let used = 0
         let count = 0
         const GAP = 16
         for (let i = 0; i < chips.length; i++) {
-          const w = chips[i].offsetWidth || 0
+          const w = chips[i].getBoundingClientRect().width || 0
           const next = used + (i > 0 ? GAP : 0) + w
           if (next <= containerWidth - 8) { used = next; count++ } else { break }
         }
@@ -512,11 +512,16 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
         setBannerMeasured(true)
       } catch {}
     }
-    // Recompute after paint
-    const id = window.setTimeout(recompute, 0)
-    const onResize = () => recompute()
-    window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); window.clearTimeout(id) }
+    const raf1 = requestAnimationFrame(() => { const raf2 = requestAnimationFrame(recompute); (recompute as any)._raf2 = raf2 })
+    const onWinResize = () => recompute()
+    window.addEventListener('resize', onWinResize)
+    const ro = (window as any).ResizeObserver ? new ResizeObserver(() => recompute()) : null
+    if (ro) ro.observe(el)
+    return () => {
+      window.removeEventListener('resize', onWinResize)
+      try { cancelAnimationFrame(raf1); if ((recompute as any)._raf2) cancelAnimationFrame((recompute as any)._raf2) } catch {}
+      if (ro) ro.disconnect()
+    }
   }, [market, localawayEvents])
 
   // Initialize chart; recreate when market changes to ensure a fresh chart per market
@@ -612,8 +617,8 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                 borderRadius:6,
                 padding:'6px 10px',
                 overflow:'hidden',
-                whiteSpace:'nowrap',
                 display:'flex',
+                flexWrap:'nowrap',
                 gap:16,
                 alignItems:'center',
                 minHeight: 28
@@ -630,7 +635,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                     const type = String(e.meta?.type || '')
                     const side = type === 'goal' ? (e.meta?.side === 'home' ? t('goals_side_home') : (e.meta?.side === 'away' ? t('goals_side_away') : '')) : ''
                     return (
-                      <div key={idx} className="evt-chip" style={{ display: (bannerMeasured && idx >= visibleBannerCount) ? 'none' : 'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                      <div key={idx} className="evt-chip" style={{ display: (bannerMeasured && idx >= visibleBannerCount) ? 'none' : 'inline-flex', alignItems:'center', gap:8, flex:'0 0 auto' }}>
                         <div style={{ width:20, textAlign:'center' }}>{emoji}</div>
                         <div className="muted small" style={{ opacity:0.85, textOverflow:'ellipsis', overflow:'hidden' }}><strong>{lg}</strong></div>
                         <div style={{ fontSize:13 }}>

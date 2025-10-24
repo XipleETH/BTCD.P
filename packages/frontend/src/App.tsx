@@ -337,6 +337,9 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
   const bannerRef = useRef<HTMLDivElement | null>(null)
   const [bannerMeasured, setBannerMeasured] = useState(false)
   const [visibleBannerCount, setVisibleBannerCount] = useState<number>(6)
+  const randBannerRef = useRef<HTMLDivElement | null>(null)
+  const [randBannerMeasured, setRandBannerMeasured] = useState(false)
+  const [randVisibleCount, setRandVisibleCount] = useState<number>(8)
   const containerId = useMemo(() => `chart_container_${market}`, [market])
 
   // Reset local state when switching markets to show a fresh chart
@@ -524,6 +527,40 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
     }
   }, [market, localawayEvents])
 
+  // Recompute how many random chips fit in the random banner without clipping
+  useEffect(() => {
+    if (market !== 'random') return
+    setRandBannerMeasured(false)
+    const el = randBannerRef.current
+    if (!el) return
+    const recompute = () => {
+      try {
+        const containerWidth = el.clientWidth || 0
+        const chips = Array.from(el.querySelectorAll('.rnd-chip')) as HTMLElement[]
+        let used = 0
+        let count = 0
+        const GAP = 16
+        for (let i = 0; i < chips.length; i++) {
+          const w = chips[i].getBoundingClientRect().width || 0
+          const next = used + (i > 0 ? GAP : 0) + w
+          if (next <= containerWidth - 8) { used = next; count++ } else { break }
+        }
+        setRandVisibleCount(count)
+        setRandBannerMeasured(true)
+      } catch {}
+    }
+    const raf1 = requestAnimationFrame(() => { const raf2 = requestAnimationFrame(recompute); (recompute as any)._raf2 = raf2 })
+    const onWinResize = () => recompute()
+    window.addEventListener('resize', onWinResize)
+    const ro = (window as any).ResizeObserver ? new ResizeObserver(() => recompute()) : null
+    if (ro) ro.observe(el)
+    return () => {
+      window.removeEventListener('resize', onWinResize)
+      try { cancelAnimationFrame(raf1); if ((recompute as any)._raf2) cancelAnimationFrame((recompute as any)._raf2) } catch {}
+      if (ro) ro.disconnect()
+    }
+  }, [market, randomEvents])
+
   // Initialize chart; recreate when market changes to ensure a fresh chart per market
   useEffect(() => {
     const el = document.getElementById(containerId) as HTMLDivElement | null
@@ -662,14 +699,14 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                 borderRadius:6,
                 padding:'6px 10px',
                 overflow:'hidden',
-                whiteSpace:'nowrap',
                 display:'flex',
+                flexWrap:'nowrap',
                 gap:16,
                 alignItems:'center',
                 minHeight: 28
-              }}>
+              }} ref={randBannerRef}>
                 {Array.isArray(randomEvents) && randomEvents.length > 0 ? (
-                  randomEvents.slice(0, 10).map((r, idx) => {
+                  randomEvents.map((r, idx) => {
                     const prev = randomEvents[idx+1]?.value
                     const stepBps = (typeof prev === 'number' && prev > 0)
                       ? Math.round(((Number(r.value) - prev) / prev) * 10000)
@@ -677,7 +714,7 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
                     const sign = stepBps !== null ? (stepBps > 0 ? `+${stepBps}` : `${stepBps}`) : '—'
                     const rounded = Math.round(Number(r.value))
                     return (
-                      <div key={idx} style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:0 }}>
+                      <div key={idx} className="rnd-chip" style={{ display: (randBannerMeasured && idx >= randVisibleCount) ? 'none' : 'inline-flex', alignItems:'center', gap:8, flex:'0 0 auto' }}>
                         <div style={{ width:20, textAlign:'center' }}>🎲</div>
                         <div style={{ fontSize:13, display:'flex', alignItems:'baseline', gap:8 }}>
                           <strong>{Number(r.value).toFixed(4)}</strong>

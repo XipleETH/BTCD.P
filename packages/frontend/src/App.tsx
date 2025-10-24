@@ -1784,6 +1784,7 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const [apiCost, setApiCost] = useState<'free'|'paid'|'none'>('none')
   const [formula, setFormula] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [page, setPage] = useState(1)
   const baseUrl = (import.meta as any).env?.VITE_API_BASE || ''
 
   const proposalsQ = useQuery({
@@ -1841,7 +1842,16 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
       return
     }
     try {
-      await fetch(`${baseUrl}/api/lab-vote`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, address }) })
+      const ts = Math.floor(Date.now()/1000)
+      const message = `Perps Lab vote\nProposal: ${id}\nVoter: ${address}\nTs: ${ts}`
+      let signature = ''
+      try {
+        signature = await signMessageAsync({ message })
+      } catch (err) {
+        alert(lang==='es' ? 'Firma rechazada' : 'Signature rejected')
+        return
+      }
+      await fetch(`${baseUrl}/api/lab-vote`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, address, message, signature }) })
       proposalsQ.refetch()
     } catch {}
   }
@@ -1909,33 +1919,55 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               })()}
             </div>
           ) : (
-            <div className="list">
-              {(proposalsQ.data || []).map((p:any) => (
-                <div key={p.id} className="row" style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
-                      <strong>{p.name}</strong>
-                      <span className="muted small">{new Date((p.ts||0)*1000).toLocaleString()}</span>
-                    </div>
-                    <div className="muted" style={{ marginTop:4 }}>{p.description}</div>
-                    <div className="grid" style={{ gap:4, marginTop:8 }}>
-                      <div className="small"><strong>{t('lab_list_up')}:</strong> {p.upDesc}</div>
-                      <div className="small"><strong>{t('lab_list_down')}:</strong> {p.downDesc}</div>
-                      <div className="small"><strong>{t('lab_list_api')}:</strong> {p.apiUrl || '—'} {p.apiCost ? `(${p.apiCost})` : ''}</div>
-                      <div className="small"><strong>{t('lab_list_formula')}:</strong> <span style={{ whiteSpace:'pre-wrap' }}>{p.formula}</span></div>
-                    </div>
+            (() => {
+              const all = (proposalsQ.data || []) as any[]
+              const pageSize = 5
+              const total = all.length
+              const pageCount = Math.max(1, Math.ceil(total / pageSize))
+              const current = Math.min(page, pageCount)
+              const start = (current - 1) * pageSize
+              const items = all.slice(start, start + pageSize)
+              return (
+                <>
+                  <div className="grid" style={{ gap: 12 }}>
+                    {items.map((p:any) => (
+                      <div key={p.id} className="card" style={{ padding: 12 }}>
+                        <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+                              <strong>{p.name}</strong>
+                              <span className="muted small">{new Date((p.ts||0)*1000).toLocaleString()}</span>
+                            </div>
+                            <div className="muted" style={{ marginTop:4 }}>{p.description}</div>
+                            <div className="grid" style={{ gap:4, marginTop:8 }}>
+                              <div className="small"><strong>{t('lab_list_up')}:</strong> {p.upDesc}</div>
+                              <div className="small"><strong>{t('lab_list_down')}:</strong> {p.downDesc}</div>
+                              <div className="small"><strong>{t('lab_list_api')}:</strong> {p.apiUrl || '—'} {p.apiCost ? `(${p.apiCost})` : ''}</div>
+                              <div className="small"><strong>{t('lab_list_formula')}:</strong> <span style={{ whiteSpace:'pre-wrap' }}>{p.formula}</span></div>
+                            </div>
+                          </div>
+                          <div style={{ width: 140, textAlign:'right' }}>
+                            <div className="muted small">{t('lab_votes')}</div>
+                            <div style={{ fontSize:18, marginBottom:8 }}><strong>{Number(p.votes||0)}</strong></div>
+                            <button className="btn sm" disabled={!isConnected} onClick={()=>vote(p.id)}>{t('lab_vote_btn')}</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ width: 140, textAlign:'right' }}>
-                    <div className="muted small">{t('lab_votes')}</div>
-                    <div style={{ fontSize:18, marginBottom:8 }}><strong>{Number(p.votes||0)}</strong></div>
-                    <button className="btn sm" disabled={!isConnected} onClick={()=>vote(p.id)}>{t('lab_vote_btn')}</button>
-                  </div>
-                </div>
-              ))}
-              {(!proposalsQ.data || proposalsQ.data.length===0) && (
-                <div className="muted">{t('lab_empty')}</div>
-              )}
-            </div>
+                  {total === 0 && (
+                    <div className="muted">{t('lab_empty')}</div>
+                  )}
+                  {total > pageSize && (
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: 8 }}>
+                      <button className="btn sm" disabled={current<=1} onClick={()=>setPage(Math.max(1, current-1))}>Prev</button>
+                      <div className="small muted">Page {current} / {pageCount}</div>
+                      <button className="btn sm" disabled={current>=pageCount} onClick={()=>setPage(Math.min(pageCount, current+1))}>Next</button>
+                    </div>
+                  )}
+                </>
+              )
+            })()
           )}
         </div>
       </div>

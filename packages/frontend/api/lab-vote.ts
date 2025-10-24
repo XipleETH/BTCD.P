@@ -1,8 +1,9 @@
 import { Redis } from '@upstash/redis'
+import { verifyMessage, getAddress } from 'viem'
 
 export const config = { runtime: 'edge' }
 
-// POST /api/lab-vote { id, address }
+// POST /api/lab-vote { id, address, message, signature }
 // - Records one vote per address for a given proposal id.
 // - Returns updated proposal with votes count.
 export default async function handler(req: Request): Promise<Response> {
@@ -14,15 +15,26 @@ export default async function handler(req: Request): Promise<Response> {
     if (!ct.includes('application/json')) return json({ error: 'invalid content-type' }, 400)
     const body = await req.json() as any
     const id = (body?.id || '').toString().trim()
-    const address = (body?.address || '').toString().trim().toLowerCase()
+    const address = (body?.address || '').toString().trim()
+    const message = (body?.message || '').toString()
+    const signature = (body?.signature || '').toString()
 
-    if (!id || !/^0x[0-9a-f]{40}$/.test(address)) return json({ error: 'invalid id/address' }, 400)
+    if (!id || !/^0x[0-9a-fA-F]{40}$/.test(address)) return json({ error: 'invalid id/address' }, 400)
+    // Require valid signature: one signed message per vote
+    if (!message || !signature) return json({ error: 'missing signature' }, 401)
+    try {
+      const addrCk = getAddress(address)
+      const ok = await verifyMessage({ address: addrCk, message, signature })
+      if (!ok) return json({ error: 'invalid signature' }, 401)
+    } catch {
+      return json({ error: 'invalid signature' }, 401)
+    }
 
-    const raw = await redis.get<string>(`btcd:lab:proposal:${id}`)
+  const raw = await redis.get<string>(`btcd:lab:proposal:${id}`)
     if (!raw) return json({ error: 'proposal not found' }, 404)
 
     // Ensure one vote per address
-    const added = await redis.sadd(`btcd:lab:proposal:${id}:voters`, address)
+  const added = await redis.sadd(`btcd:lab:proposal:${id}:voters`, address.toLowerCase())
     if (added === 1) {
       // first time this address votes -> increment votes
       try {

@@ -1651,7 +1651,6 @@ function GoalsCard({ chainKey, events, loading }: { chainKey: 'base'|'baseSepoli
         ) : (
           <div className="list">
             {current.map((e, idx) => {
-              const dt = new Date((e.time||0)*1000).toLocaleString()
               const lg = e.meta?.league || '—'
               const home = e.meta?.home?.name || 'Home'
               const away = e.meta?.away?.name || 'Away'
@@ -1668,7 +1667,6 @@ function GoalsCard({ chainKey, events, loading }: { chainKey: 'base'|'baseSepoli
               const side = type === 'goal' ? (e.meta?.side === 'home' ? t('goals_side_home') : (e.meta?.side === 'away' ? t('goals_side_away') : '')) : ''
               return (
                 <div key={idx} className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="mono small" style={{ width: 162, opacity:0.8 }}>{dt}</div>
                   <div style={{ width: 24, textAlign:'center' }}>{emoji}</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:12, opacity:0.85 }}><strong>{lg}</strong> <span className="muted small" style={{ marginLeft:6 }}>{sport || ''}</span></div>

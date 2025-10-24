@@ -1700,7 +1700,11 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
     queryKey: ['lab-proposals'],
     queryFn: async () => {
       const r = await fetch(`${baseUrl}/api/lab-proposals`, { cache: 'no-store' })
-      if (!r.ok) throw new Error('failed')
+      if (!r.ok) {
+        let txt = ''
+        try { txt = await r.text() } catch {}
+        throw new Error(`GET /api/lab-proposals ${r.status}${txt ? `: ${txt}` : ''}`)
+      }
       const j = await r.json()
       return Array.isArray(j?.proposals) ? j.proposals as any[] : []
     },
@@ -1806,6 +1810,14 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
         <div className="card-body">
           {proposalsQ.isLoading ? (
             <div className="muted">{t('lab_loading')}</div>
+          ) : proposalsQ.isError ? (
+            <div className="error">
+              {lang==='es' ? 'No se pudo cargar propuestas.' : 'Failed to load proposals.'}
+              {(() => {
+                const msg = (proposalsQ.error as any)?.message || ''
+                return msg ? <div className="small" style={{ marginTop: 6, opacity: 0.9 }}>{String(msg)}</div> : null
+              })()}
+            </div>
           ) : (
             <div className="list">
               {(proposalsQ.data || []).map((p:any) => (

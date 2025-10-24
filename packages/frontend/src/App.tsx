@@ -815,6 +815,9 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
               >{t('ui_network_test')}</button>
             </div>
             <a href="#lab" className="btn sm" style={{ marginLeft: 8 }}>{t('ui_perps_lab')}</a>
+            {isLab && (
+              <a href="#btcd" className="btn sm" style={{ marginLeft: 8 }}>{lang==='es'?'Mercados':'Markets'}</a>
+            )}
           </div>
           {/* Third row: Page selector below network menu (hidden when on Lab page) */}
           <div className="network-switcher" style={{ marginTop: 4 }}>
@@ -880,7 +883,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
   )
 }
 
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSimulateContract, useBalance, useSendTransaction } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSimulateContract, useBalance, useSendTransaction, useSignMessage } from 'wagmi'
 import { parseEther, formatUnits, formatEther, createPublicClient, http as viemHttp } from 'viem'
 
 type OpenControlled = { isLong: boolean; setIsLong: (v:boolean)=>void; leverage: number; setLeverage: (n:number)=>void; marginEth: string; setMarginEth: (s:string)=>void }
@@ -1682,6 +1685,7 @@ function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'ba
 function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const { t, lang } = useI18n()
   const { address, isConnected } = useAccount()
+  const { signMessageAsync } = useSignMessage()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [upDesc, setUpDesc] = useState('')
@@ -1706,16 +1710,32 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || !description.trim() || !upDesc.trim() || !downDesc.trim() || !formula.trim()) return
+    if (!isConnected || !address) {
+      alert(lang==='es' ? 'Conecta tu wallet para proponer' : 'Connect your wallet to propose')
+      return
+    }
     try {
       setSubmitting(true)
+      const ts = Math.floor(Date.now()/1000)
+      const message = `Perps Lab proposal\nName: ${name}\nAuthor: ${address}\nTs: ${ts}`
+      let signature = ''
+      try {
+        signature = await signMessageAsync({ message })
+      } catch (err) {
+        alert(lang==='es' ? 'Firma rechazada' : 'Signature rejected')
+        return
+      }
       const r = await fetch(`${baseUrl}/api/lab-proposals`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, description, upDesc, downDesc, apiUrl, apiCost: apiCost==='none'?'':apiCost, formula, author: address || '' })
+        body: JSON.stringify({ name, description, upDesc, downDesc, apiUrl, apiCost: apiCost==='none'?'':apiCost, formula, author: address || '', address, message, signature })
       })
       if (r.ok) {
         setName(''); setDescription(''); setUpDesc(''); setDownDesc(''); setApiUrl(''); setApiCost('none'); setFormula('')
         proposalsQ.refetch()
+      } else {
+        const txt = await r.text().catch(()=> '')
+        alert((lang==='es' ? 'No se pudo enviar propuesta: ' : 'Failed to submit proposal: ') + (txt || r.status))
       }
     } finally { setSubmitting(false) }
   }

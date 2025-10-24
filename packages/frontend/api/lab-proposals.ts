@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis'
+import { verifyMessage, getAddress } from 'viem'
 
 export const config = { runtime: 'edge' }
 
@@ -35,10 +36,25 @@ export default async function handler(req: Request): Promise<Response> {
       const apiCost = (body?.apiCost || '').toString().trim().toLowerCase()
       const formula = (body?.formula || '').toString().trim()
       const author = (body?.author || '').toString().trim()
+      const address = (body?.address || '').toString().trim()
+      const message = (body?.message || '').toString()
+      const signature = (body?.signature || '').toString()
 
       if (!name || !description || !upDesc || !downDesc || !formula) {
         return json({ error: 'missing required fields' }, 400)
       }
+      // Require a valid wallet signature for submission
+      if (!(/^0x[0-9a-fA-F]{40}$/.test(address)) || !message || !signature) {
+        return json({ error: 'missing signature' }, 401)
+      }
+      try {
+        const addrCk = getAddress(address)
+        const ok = await verifyMessage({ address: addrCk, message, signature })
+        if (!ok) return json({ error: 'invalid signature' }, 401)
+      } catch {
+        return json({ error: 'invalid signature' }, 401)
+      }
+
       const costVal = apiCost === 'paid' ? 'paid' : (apiCost === 'free' ? 'free' : '')
 
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`

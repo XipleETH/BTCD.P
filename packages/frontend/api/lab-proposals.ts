@@ -8,6 +8,8 @@ export const config = { runtime: 'edge' }
 export default async function handler(req: Request): Promise<Response> {
   try {
     const redis = Redis.fromEnv()
+    const u = new URL(req.url)
+    const debug = u.searchParams.get('debug') === '1'
     const method = req.method || 'GET'
 
     if (method === 'GET') {
@@ -20,6 +22,13 @@ export default async function handler(req: Request): Promise<Response> {
             try { items.push(JSON.parse(raw)) } catch {}
           }
         }
+      }
+      // newest first
+      items.sort((a,b) => Number(b?.ts||0) - Number(a?.ts||0))
+      if (debug) {
+        let host = ''
+        try { const h = new URL(process.env.UPSTASH_REDIS_REST_URL || ''); host = h.host } catch {}
+        return json({ proposals: items, debug: { idsCount: Array.isArray(ids)? ids.length : 0, envHasUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL), envHasToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN), upstashHost: host } })
       }
       return json({ proposals: items })
     }

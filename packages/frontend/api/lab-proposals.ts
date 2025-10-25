@@ -13,6 +13,16 @@ export default async function handler(req: Request): Promise<Response> {
     const method = req.method || 'GET'
 
     if (method === 'GET') {
+      // Biweekly cycle rollover: if we've crossed into a new cycle, finalize winner and clear proposals
+      const EPOCH_MS = Date.parse('2025-10-25T00:01:00Z')
+      const PERIOD_MS = 14 * 24 * 60 * 60 * 1000
+      const nowMs = Date.now()
+      const nowIndex = nowMs < EPOCH_MS ? -1 : Math.floor((nowMs - EPOCH_MS) / PERIOD_MS)
+      const idxKey = 'btcd:lab:cycleIndex'
+      let storedIndexRaw: any = undefined
+      try { storedIndexRaw = await redis.get<number>(idxKey) } catch {}
+      let storedIndex = (typeof storedIndexRaw === 'number') ? storedIndexRaw : null
+
       const ids = await redis.lrange<string>('btcd:lab:proposals', 0, 199)
       const items: any[] = []
       if (Array.isArray(ids)) {
@@ -58,10 +68,39 @@ export default async function handler(req: Request): Promise<Response> {
         return Number(b?.ts || 0) - Number(a?.ts || 0)
       })
 
+      // If we crossed into a new cycle since last time, archive winner and clear proposals
+      if (storedIndex === null) {
+        try { await redis.set(idxKey, nowIndex) } catch {}
+        storedIndex = nowIndex
+      }
+      if (storedIndex !== null && nowIndex > storedIndex) {
+        try {
+          // Winner is current top (after overlay+sort)
+          const top = items[0] || null
+          const winner = top ? { id: top.id, name: top.name, votes: Number(top.votes||0), ts: Number(top.ts||0) } : null
+          // Persist last winner and cycle info
+          const lastWinner = { cycle: storedIndex, decidedAt: nowMs, winner }
+          try { await redis.set('btcd:lab:lastWinner', JSON.stringify(lastWinner)) } catch {}
+          // Clear all proposal keys
+          if (Array.isArray(ids) && ids.length) {
+            await Promise.all(ids.flatMap((id) => [
+              redis.del(`btcd:lab:proposal:${id}`),
+              redis.del(`btcd:lab:proposal:${id}:votes`),
+              redis.del(`btcd:lab:proposal:${id}:voters`),
+            ]))
+          }
+          try { await redis.del('btcd:lab:proposals') } catch {}
+          // Advance cycle index
+          try { await redis.set(idxKey, nowIndex) } catch {}
+          // Empty list for this response after reset
+          items.length = 0
+        } catch {}
+      }
+
       if (debug) {
         let host = ''
         try { const h = new URL(process.env.UPSTASH_REDIS_REST_URL || ''); host = h.host } catch {}
-        return json({ proposals: items, debug: { idsCount: Array.isArray(ids)? ids.length : 0, envHasUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL), envHasToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN), upstashHost: host } })
+        return json({ proposals: items, debug: { idsCount: Array.isArray(ids)? ids.length : 0, envHasUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL), envHasToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN), upstashHost: host, cycle: { nowIndex, storedIndex } } })
       }
       return json({ proposals: items })
     }

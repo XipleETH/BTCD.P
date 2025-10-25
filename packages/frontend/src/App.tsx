@@ -467,7 +467,19 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
       setLivePrice(v)
       // Update only the last candle's close/high/low based on live price; we don't append a new candle here
       setCandles(prev => {
-        if (!prev.length) return prev
+        if (!prev.length) {
+          // Bootstrap a first candle from latest on-chain price when there is no history yet
+          const bucketSec = tfSeconds(tf)
+          const currBucket = Math.floor((ts as number) / bucketSec) * bucketSec
+          const nc: Candle = { time: currBucket as UTCTimestamp, open: v, high: v, low: v, close: v }
+          const init = [nc]
+          // persist
+          try {
+            const key = (chainKey === 'baseSepolia' ? 'base-sepolia' : 'base')
+            localStorage.setItem(`btcd:candles:${key}:${market}:${tf}`, JSON.stringify(init))
+          } catch {}
+          return init
+        }
         const bucketSec = tfSeconds(tf)
         const lastBucket = Math.floor((prev[prev.length-1].time as number) / bucketSec) * bucketSec
         const currBucket = Math.floor((ts as number) / bucketSec) * bucketSec
@@ -1790,12 +1802,33 @@ function GoalsCard({ chainKey, events, loading }: { chainKey: 'base'|'baseSepoli
 
 function RandomCard({ chainKey, oracleAddress, items, loading }: { chainKey: 'base'|'baseSepolia', oracleAddress: string, items: Array<{ time:number, value:number }>, loading: boolean }) {
   const { t } = useI18n()
+  // Fallback: if no items yet, show the current oracle price as a single recent number
+  const desiredChain = chainKey === 'baseSepolia' ? baseSepolia : base
+  const { data: latestRaw } = useReadContract({
+    abi: oracleAbi as any,
+    address: (oracleAddress || undefined) as any,
+    functionName: 'latestAnswer',
+    chainId: desiredChain.id,
+    query: { enabled: Boolean(oracleAddress && !items.length && !loading), refetchInterval: 60000 }
+  })
+  const singleVal = typeof latestRaw === 'bigint' ? Number(formatUnits(latestRaw, 8)) : undefined
   return (
     <div className="card">
       <div className="card-header"><h3>{t('random_title')}</h3></div>
       <div className="card-body">
-        {!items.length && !loading ? (
+        {(!items.length && !loading && singleVal === undefined) ? (
           <div className="muted">{t('random_none')}</div>
+        ) : (!items.length && singleVal !== undefined) ? (
+          <div className="list">
+            <div className="row" style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, display:'flex', alignItems:'baseline', gap:8 }}>
+                  <strong>{singleVal.toFixed(4)}</strong>
+                  <span className="muted small">≈ {Math.round(singleVal)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="list">
             {items.slice(0, 10).map((r, idx)=>{

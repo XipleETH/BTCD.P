@@ -36,6 +36,11 @@ export default async function handler(req: Request): Promise<Response> {
         out.push(obj)
       } catch {}
     }
+    // For random, ignore any pre-existing list to avoid serving stale snapshots
+    if (market === 'random') {
+      // Force downstream logic to use fresh ticks path instead
+      out.length = 0
+    }
     // If we have fresh events, also snapshot to a sticky key so we can
     // serve "last known" when the list is temporarily empty (never show empty UI)
   const stickyKey = `btcd:events:sticky:${chain}:${market}`
@@ -45,16 +50,18 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ events: out })
     }
     // Sticky fallback: return last non-empty snapshot if available
-    try {
-      let snap = await redis.get<string>(stickyKey)
-      if ((!snap || snap.length === 0) && legacySticky) {
-        try { snap = await redis.get<string>(legacySticky) } catch {}
-      }
-      if (snap) {
-        const arr = JSON.parse(snap)
-        if (Array.isArray(arr) && arr.length) return json({ events: arr })
-      }
-    } catch {}
+    if (market !== 'random') {
+      try {
+        let snap = await redis.get<string>(stickyKey)
+        if ((!snap || snap.length === 0) && legacySticky) {
+          try { snap = await redis.get<string>(legacySticky) } catch {}
+        }
+        if (snap) {
+          const arr = JSON.parse(snap)
+          if (Array.isArray(arr) && arr.length) return json({ events: arr })
+        }
+      } catch {}
+    }
 
     // If market=random, fallback to ZSET ticks to build a simple recent numbers feed
     if (market === 'random') {
@@ -76,15 +83,8 @@ export default async function handler(req: Request): Promise<Response> {
         points.sort((a,b)=> b.time - a.time)
         const recent = points.slice(0, limit).map(p => ({ time: p.time, value: p.value, meta: { type: 'random' } }))
         if (recent.length) {
-          // Mirror to events list (newest-first at head)
-          try {
-            for (let i = recent.length - 1; i >= 0; i--) {
-              await redis.lpush(eventsKey, JSON.stringify(recent[i]))
-            }
-            await redis.ltrim(eventsKey, 0, eventsMax - 1)
-            // Update sticky snapshot as well
-            try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
-          } catch {}
+          // Update sticky snapshot and serve fresh events without touching the list
+          try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
           return json({ events: recent })
         }
 
@@ -144,14 +144,8 @@ export default async function handler(req: Request): Promise<Response> {
             parsed.sort((a,b)=> b.time - a.time)
             const limited = parsed.slice(0, limit)
             if (limited.length) {
-              try {
-                for (let i = limited.length - 1; i >= 0; i--) {
-                  await redis.lpush(eventsKey, JSON.stringify(limited[i]))
-                }
-                await redis.ltrim(eventsKey, 0, eventsMax - 1)
-                // Update sticky snapshot as well
-                try { await redis.set(stickyKey, JSON.stringify(limited)) } catch {}
-              } catch {}
+              // Update sticky snapshot and serve fresh events without touching the list
+              try { await redis.set(stickyKey, JSON.stringify(limited)) } catch {}
               return json({ events: limited })
             }
           }

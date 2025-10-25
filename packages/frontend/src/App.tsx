@@ -606,10 +606,17 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
     })
     chartRef.current = chart as any
     const isRandom = market === 'random'
+    const isLocalAway = market === 'localaway'
     const series = chart.addCandlestickSeries(
       isRandom
-        ? { upColor: '#3b82f6', downColor: '#1d4ed8', borderVisible: false, wickUpColor: '#60a5fa', wickDownColor: '#60a5fa' }
-        : { upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' }
+        // Random: up = blue palette (kept), down = light amber/orange as requested
+        ? { upColor: '#3b82f6', downColor: '#FBBF24', borderVisible: false, wickUpColor: '#60A5FA', wickDownColor: '#FCD34D' }
+        : (isLocalAway
+            // Home/Away: up = dark gray, down = white
+            ? { upColor: '#374151', downColor: '#FFFFFF', borderVisible: false, wickUpColor: '#9CA3AF', wickDownColor: '#D1D5DB' }
+            // BTC.D: keep green/red defaults
+            : { upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' }
+          )
     )
     seriesRef.current = series as any
     const onResize = () => chart.applyOptions({ width: el.clientWidth, height: calcHeight() })

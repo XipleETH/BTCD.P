@@ -77,7 +77,20 @@ export default async function handler(req: Request): Promise<Response> {
         try {
           // Winner is current top (after overlay+sort)
           const top = items[0] || null
-          const winner = top ? { id: top.id, name: top.name, votes: Number(top.votes||0), ts: Number(top.ts||0) } : null
+          // Persist full proposal details so UI can show exact information of the winning proposal
+          const winner = top ? {
+            id: top.id,
+            ts: Number(top.ts||0),
+            name: top.name,
+            description: top.description,
+            upDesc: top.upDesc,
+            downDesc: top.downDesc,
+            apiUrl: top.apiUrl,
+            apiCost: top.apiCost,
+            formula: top.formula,
+            author: top.author,
+            votes: Number(top.votes||0)
+          } : null
           // Persist last winner and cycle info
           const lastWinner = { cycle: storedIndex, decidedAt: nowMs, winner }
           try { await redis.set('btcd:lab:lastWinner', JSON.stringify(lastWinner)) } catch {}
@@ -97,12 +110,21 @@ export default async function handler(req: Request): Promise<Response> {
         } catch {}
       }
 
+      // Always attempt to include lastWinner in response
+      let lastWinner: any = null
+      try {
+        const rawLW = await redis.get<any>('btcd:lab:lastWinner')
+        if (rawLW) {
+          lastWinner = typeof rawLW === 'string' ? JSON.parse(rawLW) : (typeof rawLW === 'object' ? rawLW : null)
+        }
+      } catch {}
+
       if (debug) {
         let host = ''
         try { const h = new URL(process.env.UPSTASH_REDIS_REST_URL || ''); host = h.host } catch {}
-        return json({ proposals: items, debug: { idsCount: Array.isArray(ids)? ids.length : 0, envHasUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL), envHasToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN), upstashHost: host, cycle: { nowIndex, storedIndex } } })
+        return json({ proposals: items, lastWinner, debug: { idsCount: Array.isArray(ids)? ids.length : 0, envHasUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL), envHasToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN), upstashHost: host, cycle: { nowIndex, storedIndex } } })
       }
-      return json({ proposals: items })
+      return json({ proposals: items, lastWinner })
     }
 
     if (method === 'POST') {

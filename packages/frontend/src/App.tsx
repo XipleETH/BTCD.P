@@ -1873,7 +1873,10 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
         throw new Error(`GET /api/lab-proposals ${r.status}${txt ? `: ${txt}` : ''}`)
       }
       const j = await r.json()
-      return Array.isArray(j?.proposals) ? j.proposals as any[] : []
+      return {
+        proposals: Array.isArray(j?.proposals) ? j.proposals as any[] : [],
+        lastWinner: j?.lastWinner || null,
+      }
     },
     refetchInterval: 30000,
   })
@@ -2034,7 +2037,8 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
             </div>
           ) : (
             (() => {
-              const all = (proposalsQ.data || []) as any[]
+              const all = ((proposalsQ.data as any)?.proposals || []) as any[]
+              const lastWinner = (proposalsQ.data as any)?.lastWinner || null
               const pageSize = 5
               const total = all.length
               const pageCount = Math.max(1, Math.ceil(total / pageSize))
@@ -2043,6 +2047,33 @@ function PerpsLab({ chainKey }: { chainKey: 'base'|'baseSepolia' }) {
               const items = all.slice(start, start + pageSize)
               return (
                 <>
+                  {/* Last cycle winner card at the top, if available */}
+                  {lastWinner?.winner ? (
+                    <div className="card" style={{ padding: 12, borderColor: 'rgba(34,197,94,0.6)' }}>
+                      <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <strong>{lastWinner.winner.name}</strong>
+                              <span className="badge" style={{ background:'#f59e0b', color:'#111' }}>Deploying</span>
+                            </div>
+                            <span className="muted small">{new Date(Number(lastWinner.winner.ts||0)*1000).toLocaleString()}</span>
+                          </div>
+                          <div className="muted" style={{ marginTop:4 }}>{lastWinner.winner.description}</div>
+                          <div className="grid" style={{ gap:4, marginTop:8 }}>
+                            <div className="small"><strong>{t('lab_list_up')}:</strong> {lastWinner.winner.upDesc}</div>
+                            <div className="small"><strong>{t('lab_list_down')}:</strong> {lastWinner.winner.downDesc}</div>
+                            <div className="small"><strong>{t('lab_list_api')}:</strong> {lastWinner.winner.apiUrl || '—'} {lastWinner.winner.apiCost ? `(${lastWinner.winner.apiCost})` : ''}</div>
+                            <div className="small"><strong>{t('lab_list_formula')}:</strong> <span style={{ whiteSpace:'pre-wrap' }}>{lastWinner.winner.formula}</span></div>
+                          </div>
+                        </div>
+                        <div style={{ width: 140, textAlign:'right' }}>
+                          <div className="muted small">{t('lab_votes')}</div>
+                          <div style={{ fontSize:18, marginBottom:8 }}><strong>{Number(lastWinner.winner.votes||0)}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="grid" style={{ gap: 12 }}>
                     {items.map((p:any) => (
                       <div key={p.id} className="card" style={{ padding: 12 }}>

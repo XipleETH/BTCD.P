@@ -124,6 +124,10 @@ const translations: Record<Lang, Record<string, string>> = {
 
     random_title: 'Números aleatorios (recientes)',
     random_none: 'No hay números recientes.',
+    info_title: 'Info',
+    info_btcd: 'BTC Dominance (BTC.D) es un índice que sigue la dominancia de BTC como porcentaje del mercado. En Perp‑it, lo aproximamos con una fórmula similar a TradingView agregando los 250 tokens principales. Los datos de mercado provienen de APIs públicas (CoinGecko) y nuestra API interna los resume para el oráculo y las velas.',
+    info_random: 'Random genera un movimiento aleatorio en cada tick (en promedio cada ~7 segundos): un valor entre −0,10% y +0,10% se suma al índice. Es útil para probar estrategias y el flujo de trading sin depender de mercados externos.',
+    info_localaway: 'Home/Away Index se mueve según los eventos de partido: suma cuando anota el equipo local y resta cuando anota el visitante. Soporta varios deportes (handball, basketball, football y volleyball). La magnitud por evento suele estar en el rango de −0,10% a +0,10% según el deporte y el contexto. Los eventos llegan desde una API de deportes y nuestra API interna los adapta.'
   },
   en: {
     ui_network_live: 'Live Perps',
@@ -239,6 +243,10 @@ const translations: Record<Lang, Record<string, string>> = {
 
     random_title: 'Random numbers (recent)',
     random_none: 'No recent numbers.',
+    info_title: 'Info',
+    info_btcd: 'BTC Dominance (BTC.D) tracks bitcoin’s dominance as a percentage of the market. In Perp‑it, we approximate it with a TradingView‑like formula by aggregating the top 250 tokens. Market data comes from public APIs (CoinGecko), and our internal API composes and summarizes it for the oracle and candles.',
+    info_random: 'Random produces an artificial move on each tick (on average every ~7 seconds): a value between −0.10% and +0.10% is added to the index. It’s handy to test strategies and the trading flow without relying on external markets.',
+    info_localaway: 'The Home/Away Index responds to match events: it goes up when the home team scores and down when the away team scores. It supports multiple sports (handball, basketball, football and volleyball). The per‑event magnitude is typically between −0.10% and +0.10%, depending on the sport and context. Events arrive from a sports API and our internal API adapts them.'
   }
 }
 const I18nContext = createContext<{ lang: Lang; t: (k: string) => string }>({ lang: 'es', t: (k)=> translations.es[k] || k })
@@ -763,6 +771,19 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
   )
 }
 
+function InfoCard({ market }: { market: 'btcd'|'random'|'localaway' }) {
+  const { t } = useI18n()
+  const bodyKey = market === 'btcd' ? 'info_btcd' : (market === 'random' ? 'info_random' : 'info_localaway')
+  return (
+    <div className="card">
+      <div className="card-header"><h3>{t('info_title')}</h3></div>
+      <div className="card-body">
+        <div className="muted" style={{ whiteSpace:'pre-wrap', lineHeight: 1.5 }}>{t(bodyKey)}</div>
+      </div>
+    </div>
+  )
+}
+
 // Aggregation removed from client; candles served from pre-aggregated JSON
 
 const queryClient = new QueryClient()
@@ -944,6 +965,7 @@ function AppContent({ market, isLab }: { market: 'btcd'|'random'|'localaway', is
 
             <section className="main-grid">
               <div className="col">
+                <InfoCard market={market} />
                 <TradePanel perpsAddress={perpsAddress} oracleAddress={oracleAddress} chainKey={chain} market={market} />
                 <TreasuryCard perpsAddress={perpsAddress} desired={chain} />
                 <ConfigCard oracleAddress={oracleAddress} perpsAddress={perpsAddress} />

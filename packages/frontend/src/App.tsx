@@ -105,9 +105,11 @@ const translations: Record<Lang, Record<string, string>> = {
     liq_btn: 'Liquidar mi posición',
     liq_sim_failed_prefix: 'Simulación falló:',
 
-    treasury_title: 'Treasury',
-    treasury_balance: 'Saldo:',
-    treasury_deposit: 'Depositar al tesoro',
+  treasury_title: 'Treasury',
+  treasury_balance: 'Saldo:',
+  treasury_deposit: 'Stake en el tesoro',
+  treasury_unstake: 'Unstake',
+  treasury_staked_msg: 'El ETH queda staked por un mes.',
     invalid_contract_address: 'Dirección de contrato inválida.',
 
     trade_fees: 'Fees: 0.10% al abrir y 0.10% al cerrar',
@@ -224,9 +226,11 @@ const translations: Record<Lang, Record<string, string>> = {
     liq_btn: 'Liquidate my position',
     liq_sim_failed_prefix: 'Simulation failed:',
 
-    treasury_title: 'Treasury',
-    treasury_balance: 'Balance:',
-    treasury_deposit: 'Deposit to treasury',
+  treasury_title: 'Treasury',
+  treasury_balance: 'Balance:',
+  treasury_deposit: 'Stake on treasury',
+  treasury_unstake: 'Unstake',
+  treasury_staked_msg: 'ETH is staked for one month.',
     invalid_contract_address: 'Invalid contract address.',
 
     trade_fees: 'Fees: 0.10% to open and 0.10% to close',
@@ -1567,6 +1571,7 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
   const [amt, setAmt] = useState('0.1')
   const { sendTransactionAsync, isPending, error } = useSendTransaction()
   const [localErr, setLocalErr] = useState<string>('')
+  const [toast, setToast] = useState<string>('')
   const onFund = async () => {
     try {
       setLocalErr('')
@@ -1575,10 +1580,14 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
   if (!isAddr) { setLocalErr(t('invalid_contract_address')); return }
       try {
         await sendTransactionAsync?.({ chainId: chain.id, to: perpsAddress as any, value: val })
+        setToast(t('treasury_staked_msg'))
+        setTimeout(() => setToast(''), 4000)
       } catch (e: any) {
         // Reintento con gas fijo por si la estimación falló
         try {
           await sendTransactionAsync?.({ chainId: chain.id, to: perpsAddress as any, value: val, gas: 60000n })
+          setToast(t('treasury_staked_msg'))
+          setTimeout(() => setToast(''), 4000)
         } catch (e2: any) {
           setLocalErr(e2?.shortMessage || e2?.message || String(e2))
         }
@@ -1595,9 +1604,13 @@ function ContractTreasury({ perpsAddress, desired }: { perpsAddress: string, des
         <div className="row">
           <input className="input" placeholder="0.1" value={amt} onChange={e=>setAmt(e.target.value)} />
           <button className="btn" onClick={onFund} disabled={!perpsAddress || isPending || !amt.trim()} style={{ marginLeft: 8 }}>{t('treasury_deposit')}</button>
+          <button className="btn" style={{ marginLeft: 8 }}>{t('treasury_unstake')}</button>
         </div>
         {localErr && <div className="error">{localErr}</div>}
         {error && <div className="error">{String(error)}</div>}
+        {toast && (
+          <div className="toast">{toast}</div>
+        )}
       </div>
     </div>
   )

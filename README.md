@@ -1,37 +1,35 @@
 # Perp‑it — Turn anything into a market
 
-English version: see [README.en.md](./README.en.md)
+A decentralized futures exchange for perpetuals where prices come from algorithms and real‑world APIs, not order books. Trade synthetic indices like BTC Dominance, sports (Home/Away), or even a Random index. Stake ETH to the on‑chain treasury and “be the house.”
 
-Una DEX de futuros perpetuos donde los precios vienen de algoritmos y APIs del mundo real, no de order books. Tradea índices sintéticos como BTC Dominance, deportes (Home/Away) o incluso un índice Random. Stakea ETH al tesoro on‑chain y “sé la casa”.
+## What it does
+- Trade long/short perps (up to 150x) on data‑driven indices: BTC.D, Home/Away, Random.
+- Stake ETH into the Treasury (locked 1 month) to back PnL and earn fees.
+- Propose and vote new markets in the Perp Lab; the winning idea deploys as a Test PERP.
 
-## Qué hace
-- Long/short perps (hasta 150x) sobre índices guiados por datos: BTC.D, Home/Away, Random.
-- Stake de ETH al Treasury (bloqueo 1 mes) para respaldar PnL y ganar fees.
-- Proponer y votar nuevos mercados en el Perp Lab; la idea ganadora se despliega como Test PERP.
+## How it works
+- Oracles publish index values on‑chain; candles are pre‑aggregated with deterministic continuity.
+- Testnet infra uses Web2 workers + Redis to ingest data and push oracle updates.
+- Mainnet plan: Chainlink (Functions/Data Feeds + Automation) for decentralized, verifiable updates.
+- Built‑in risk tooling: SL/TP (absolute/relative), liquidation self‑check, solvency warning on close.
+- Mobile‑first UI with responsive charts and event/number banners.
 
-## Cómo funciona
-- Oráculos publican valores on‑chain; velas pre‑agregadas con continuidad determinística.
-- En testnet: workers Web2 + Redis para ingerir datos y pushear actualizaciones.
-- Plan mainnet: Chainlink (Functions/Data Feeds + Automation) para updates verificables.
-- Riesgo integrado: SL/TP (absoluto/relativo), auto‑chequeo de liquidación, alerta de solvencia al cerrar.
-- UI mobile‑first con gráficas responsivas y banners de eventos/números.
+## Problems it solves
+- Manipulation‑resistant: prices from open math and neutral oracles (not thin order books).
+- No token rug/illiquidity risk: you trade data values, not illiquid tokens.
+- Reduces wash‑trading/insider games: movement is driven by external data; traders can’t move the chart.
+- Faster iteration: community proposals → Test PERPs → rapid validation on Base.
 
-## Problemas que resuelve
-- Resistencia a manipulación: precios de matemática abierta y oráculos neutrales (no de libros finos).
-- Sin riesgo de rug/token: se tradean valores de datos, no tokens ilíquidos.
-- Menos wash trading e insiders: el movimiento viene de datos externos; traders no mueven la gráfica.
-- Iteración veloz: propuestas de comunidad → Test PERPs → validación rápida en Base.
-
-## Stack tecnológico
-- Blockchain: Base, Base Sepolia (EVM); contratos Perps + Oracle
+## Tech stack
+- Blockchain: Base, Base Sepolia (EVM); Perps + Oracle contracts
 - Web3: wagmi, viem, RainbowKit (WalletConnect)
 - Frontend: React, TypeScript, Vite, TanStack Query, Lightweight Charts
-- Infra (test): Railway workers/scripts, Upstash Redis, API REST (VITE_API_BASE)
-- Oráculos (plan): Chainlink Functions/Data Feeds + Automation
+- Infra (test): Railway workers/scripts, Upstash Redis, REST API (VITE_API_BASE)
+- Oracles (plan): Chainlink Functions/Data Feeds + Automation
 - Deploy: Vercel (frontend)
 
-## Flujos clave
-- Trading: conecta wallet → elige índice → setea leverage/margen → abrir/cerrar
-- Treasury: Stake on treasury → el ETH queda staked por un mes (toast visible)
-- Perp Lab: envía fórmula/API + spec → firma y vota → la idea top va a testnet
+## Key flows
+- Trade: connect wallet → choose index → set leverage/margin → open/close
+- Treasury: Stake on treasury → ETH is staked for one month (visible toast)
+- Perp Lab: submit formula/API + spec → sign and vote → top idea deploys to testnet
 

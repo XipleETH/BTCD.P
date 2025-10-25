@@ -597,9 +597,12 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
       if (w <= 640) return Math.max(280, Math.floor(w * 0.7))
       return 480
     }
+    const initialHeight = calcHeight()
+    // Ensure the container div matches the chart height to avoid extra empty space below (especially on mobile)
+    try { el.style.height = `${initialHeight}px` } catch {}
     const chart = createChart(el, {
       width: el.clientWidth,
-      height: calcHeight(),
+      height: initialHeight,
       layout: { background: { type: ColorType.Solid, color: '#0b1221' }, textColor: '#DDD' },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
@@ -619,7 +622,11 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
           )
     )
     seriesRef.current = series as any
-    const onResize = () => chart.applyOptions({ width: el.clientWidth, height: calcHeight() })
+    const onResize = () => {
+      const h = calcHeight()
+      try { el.style.height = `${h}px` } catch {}
+      chart.applyOptions({ width: el.clientWidth, height: h })
+    }
     window.addEventListener('resize', onResize)
     return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = null }
   }, [market])

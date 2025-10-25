@@ -240,7 +240,13 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .chart-guard.left { top: 0; bottom: 0; left: 0; width: 18px; background: linear-gradient(to right, rgba(255,255,255,0.05), rgba(255,255,255,0)); border-top-left-radius: 8px; border-bottom-left-radius: 8px; touch-action: pan-y; }
 .chart-guard.right { top: 0; bottom: 0; right: 0; width: 18px; background: linear-gradient(to left, rgba(255,255,255,0.05), rgba(255,255,255,0)); border-top-right-radius: 8px; border-bottom-right-radius: 8px; touch-action: pan-y; }
 
-/* On mobile, reduce the bottom chart guard height so the rectangle is not too large */
+/* On smaller screens, reduce the bottom chart guard height so the rectangle is not too large */
+@media (max-width: 980px) {
+  .chart-guard.bottom { height: 14px; }
+}
 @media (max-width: 640px) {
-  .chart-guard.bottom { height: 12px; }
+  .chart-guard.bottom { height: 6px; background: linear-gradient(to top, rgba(255,255,255,0.03), rgba(255,255,255,0)); }
+}
+@media (max-width: 400px) {
+  .chart-guard.bottom { height: 4px; }
 }

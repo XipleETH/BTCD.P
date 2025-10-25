@@ -1,5 +1,7 @@
 # Perp‑it — Turn anything into a market
 
+English version: see [README.en.md](./README.en.md)
+
 Una DEX de futuros perpetuos donde los precios vienen de algoritmos y APIs del mundo real, no de order books. Tradea índices sintéticos como BTC Dominance, deportes (Home/Away) o incluso un índice Random. Stakea ETH al tesoro on‑chain y “sé la casa”.
 
 ## Qué hace

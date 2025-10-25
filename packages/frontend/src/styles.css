@@ -245,7 +245,12 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
   .chart-guard.bottom { height: 14px; }
 }
 @media (max-width: 640px) {
-  .chart-guard.bottom { height: 6px; background: linear-gradient(to top, rgba(255,255,255,0.03), rgba(255,255,255,0)); }
+  /* Hide the bottom guard entirely on small phones to remove the visual block */
+  .chart-guard.bottom { display: none; height: 0; background: none; }
+  /* Make the other guards thinner so the frame looks lighter */
+  .chart-guard.top { height: 10px; background: linear-gradient(to bottom, rgba(255,255,255,0.025), rgba(255,255,255,0)); }
+  .chart-guard.left { width: 10px; background: linear-gradient(to right, rgba(255,255,255,0.025), rgba(255,255,255,0)); }
+  .chart-guard.right { width: 10px; background: linear-gradient(to left, rgba(255,255,255,0.025), rgba(255,255,255,0)); }
 }
 @media (max-width: 400px) {
   .chart-guard.bottom { height: 4px; }

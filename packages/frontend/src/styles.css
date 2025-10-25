@@ -207,8 +207,12 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .market-random .brand { --brand-start: #21d4fd; --brand-end: #7c3aed; }
 /* Long/Short active painting per page (Random) */
 .market-random .long-btn.active { background: rgba(59,130,246,0.16); border-color: rgba(59,130,246,0.6); color: #e6f1ff; }
-.market-random .short-btn.active { background: rgba(29,78,216,0.16); border-color: rgba(29,78,216,0.6); color: #e6ecff; }
+.market-random .short-btn.active { background: #FBBF24; border-color: rgba(251,191,36,0.65); color: #FFF7E6; }
 .market-random .chart { box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 12px 28px rgba(0,0,0,0.4), 0 0 24px rgba(124,58,237,0.15); }
+
+/* Override Random: make Short button amber/yellow to match down candles */
+.market-random .short-btn { color: #FBBF24; }
+.market-random .short-btn.active { background: rgba(251,191,36,0.18); border-color: rgba(251,191,36,0.65); color: #FFF7E6; }
 
 .market-localaway .card { background: #141414; border-color: #3a3a3a; }
 .market-localaway .card-header { border-bottom-color: #3a3a3a; }
@@ -232,6 +236,12 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .market-localaway .long-btn.active { background: rgba(22,163,74,0.16); border-color: rgba(22,163,74,0.6); color: #e7f9ee; }
 .market-localaway .short-btn.active { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.6); color: #ffe5e5; }
 .market-localaway .chart { box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 12px 28px rgba(0,0,0,0.4), 0 0 24px rgba(34,211,238,0.15); }
+
+/* Override Home/Away: match buttons to candles (Long = light purple, Short = bone) */
+.market-localaway .long-btn { color: #C4B5FD; }
+.market-localaway .long-btn.active { background: rgba(196,181,253,0.18); border-color: rgba(196,181,253,0.65); color: #F5F3FF; }
+.market-localaway .short-btn { color: #E7E5E4; }
+.market-localaway .short-btn.active { background: rgba(231,229,228,0.18); border-color: rgba(231,229,228,0.6); color: #FAFAF9; }
 
 /* Chart scroll guards: transparent strips to allow page scroll without panning the chart */
 .chart-guard { position: absolute; z-index: 2; pointer-events: auto; cursor: grab; transition: opacity var(--transition-fast); }

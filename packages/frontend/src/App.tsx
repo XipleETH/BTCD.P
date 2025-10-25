@@ -612,11 +612,11 @@ function DominanceChart({ oracleAddress, chainKey, market, localawayEvents, loca
     const isLocalAway = market === 'localaway'
     const series = chart.addCandlestickSeries(
       isRandom
-        // Random: up = blue palette (kept), down = light amber/orange as requested
+        // Random: up = blue palette (kept), down = amber/yellow (matches short button)
         ? { upColor: '#3b82f6', downColor: '#FBBF24', borderVisible: false, wickUpColor: '#60A5FA', wickDownColor: '#FCD34D' }
         : (isLocalAway
-            // Home/Away: up = dark gray, down = white
-            ? { upColor: '#374151', downColor: '#FFFFFF', borderVisible: false, wickUpColor: '#9CA3AF', wickDownColor: '#D1D5DB' }
+            // Home/Away: up = light opaque purple, down = bone (off-white)
+            ? { upColor: '#C4B5FD', downColor: '#E7E5E4', borderVisible: false, wickUpColor: '#DDD6FE', wickDownColor: '#D6D3D1' }
             // BTC.D: keep green/red defaults
             : { upColor: '#16a34a', downColor: '#ef4444', borderVisible: false, wickUpColor: '#16a34a', wickDownColor: '#ef4444' }
           )

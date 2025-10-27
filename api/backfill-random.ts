@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis'
 
 export const config = { runtime: 'edge' }
 
-// POST { secret, chain, oracle, fromBlock, toBlock }
+// POST { secret, chain, oracle, fromBlock, toBlock, lookbackBlocks? }
 export default async function handler(req: Request): Promise<Response> {
   try {
     if (req.method !== 'POST') return json({ error: 'method' }, 405)
@@ -11,11 +11,9 @@ export default async function handler(req: Request): Promise<Response> {
     if (!secret || secret !== (process.env.INGEST_SECRET || '')) return json({ error: 'unauthorized' }, 401)
     const chain = String(body?.chain || 'base-sepolia').toLowerCase()
     const oracle = String(body?.oracle || '')
-    const fromBlock = Number(body?.fromBlock)
-    const toBlock = Number(body?.toBlock)
-    if (!oracle || !Number.isFinite(fromBlock) || !Number.isFinite(toBlock) || fromBlock < 0 || toBlock < fromBlock) {
-      return json({ error: 'invalid params' }, 400)
-    }
+    let fromBlock = body?.fromBlock !== undefined ? Number(body?.fromBlock) : NaN
+    let toBlock = body?.toBlock !== undefined ? Number(body?.toBlock) : NaN
+    const lookbackBlocks = body?.lookbackBlocks !== undefined ? Number(body?.lookbackBlocks) : NaN
 
     const rpc = chain === 'base'
       ? (process.env.BASE_RPC_URL || '')
@@ -32,6 +30,19 @@ export default async function handler(req: Request): Promise<Response> {
       const j = await res.json()
       if (j.error) throw new Error(j.error?.message || 'rpc error')
       return j.result
+    }
+
+    // Determine block range if using lookback
+    if (!Number.isFinite(fromBlock) || !Number.isFinite(toBlock)) {
+      if (Number.isFinite(lookbackBlocks) && lookbackBlocks > 0) {
+        const bnHex = await rpcCall('eth_blockNumber', []) as string
+        const latestBn = Number(bnHex)
+        toBlock = latestBn
+        fromBlock = Math.max(0, latestBn - Math.floor(lookbackBlocks))
+      }
+    }
+    if (!oracle || !Number.isFinite(fromBlock) || !Number.isFinite(toBlock) || fromBlock < 0 || toBlock < fromBlock) {
+      return json({ error: 'invalid params' }, 400)
     }
 
     // Fetch logs for PriceUpdated(int256,uint256)

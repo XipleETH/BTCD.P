@@ -52,7 +52,8 @@ export default async function handler(req: Request): Promise<Response> {
     } else {
       // Default path: use ticks ZSET (absolute index/price)
       const ticksKey = `btcd:ticks:${chain}:${market}`
-      const N = 10000
+      // Random needs a deeper lookback to avoid losing older candles when the server window slides
+      const N = market === 'random' ? 120000 : 10000
       const arr = await redis.zrange<[string | number]>(ticksKey, -N, -1, { withScores: true })
       for (let i = 0; i < arr.length; i += 2) {
         const member = arr[i] as string

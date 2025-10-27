@@ -16,8 +16,90 @@ export default async function handler(req: Request): Promise<Response> {
     const eventsKey = `btcd:events:${chain}:${market}`
     const eventsMax = Math.max(1, Number(process.env.EVENTS_MAX || '5000'))
 
-    // Fresh events from Redis list
-    const arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
+    // For random, derive fresh events directly from ticks to avoid stale list snapshots
+    if (market === 'random') {
+      try {
+        const stickyKey = `btcd:events:sticky:${chain}:${market}`
+        const ticksKey = `btcd:ticks:${chain}:${market}`
+        const windowN = Math.max(limit * 5, limit)
+        const arr = await redis.zrange<[string | number]>(ticksKey, -windowN, -1, { withScores: true })
+        const points: Array<{ time: number; value: number }> = []
+        for (let i = 0; i < arr.length; i += 2) {
+          const member = arr[i] as string
+          const score = Number(arr[i+1])
+          const value = typeof member === 'string' ? Number(member) : Number(member)
+          if (!Number.isFinite(score) || !Number.isFinite(value)) continue
+          points.push({ time: Math.floor(score), value })
+        }
+        points.sort((a,b)=> b.time - a.time)
+        const recent = points.slice(0, limit).map(p => ({ time: p.time, value: p.value, meta: { type: 'random' } }))
+        if (recent.length) {
+          try {
+            // optional: keep list/sticky fresh for other consumers
+            for (let i = recent.length - 1; i >= 0; i--) {
+              await redis.lpush(eventsKey, JSON.stringify(recent[i]))
+            }
+            await redis.ltrim(eventsKey, 0, eventsMax - 1)
+            try { await redis.set(stickyKey, JSON.stringify(recent)) } catch {}
+          } catch {}
+          return json({ events: recent })
+        }
+
+        // Secondary fallback: on-chain logs if oracle provided
+        if (!recent.length && oracle) {
+          const rpc = chain === 'base'
+            ? (process.env.BASE_RPC_URL || '')
+            : (process.env.BASE_SEPOLIA_RPC_URL || '')
+          if (rpc) {
+            const rpcCall = async (method: string, params: any[]) => {
+              const res = await fetch(rpc, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+              })
+              if (!res.ok) throw new Error('rpc http ' + res.status)
+              const j = await res.json()
+              if (j.error) throw new Error(j.error?.message || 'rpc error')
+              return j.result
+            }
+            const bnHex = await rpcCall('eth_blockNumber', []) as string
+            const latestBn = BigInt(bnHex)
+            const fromBn = latestBn > 30000n ? (latestBn - 30000n) : 0n
+            const logs = await rpcCall('eth_getLogs', [{ address: oracle, fromBlock: '0x' + fromBn.toString(16), toBlock: '0x' + latestBn.toString(16) }]) as Array<any>
+            const parsed: any[] = []
+            for (const l of logs) {
+              const data: string = l?.data || '0x'
+              const s = data.startsWith('0x') ? data.slice(2) : data
+              if (s.length < 64 * 2) continue
+              const priceHex = '0x' + s.slice(0, 64)
+              const tsHex = '0x' + s.slice(64, 128)
+              const priceBi = BigInt(priceHex)
+              const signed = (priceBi & (1n << 255n)) ? (priceBi - (1n << 256n)) : priceBi
+              const ts = Number(BigInt(tsHex))
+              const dec = Number(signed) / 1e8
+              if (!Number.isFinite(ts) || !Number.isFinite(dec) || dec <= 0) continue
+              parsed.push({ time: Math.floor(ts), value: dec, meta: { type: 'random' } })
+            }
+            parsed.sort((a,b)=> b.time - a.time)
+            const limited = parsed.slice(0, limit)
+            if (limited.length) {
+              try {
+                for (let i = limited.length - 1; i >= 0; i--) {
+                  await redis.lpush(eventsKey, JSON.stringify(limited[i]))
+                }
+                await redis.ltrim(eventsKey, 0, eventsMax - 1)
+                try { await redis.set(stickyKey, JSON.stringify(limited)) } catch {}
+              } catch {}
+              return json({ events: limited })
+            }
+          }
+        }
+      } catch {}
+      return json({ events: [] })
+    }
+
+  // Fresh events from Redis list (non-random markets)
+  const arr = await redis.lrange<string>(eventsKey, 0, limit - 1)
     const out: any[] = []
     for (const raw of arr) {
       try {

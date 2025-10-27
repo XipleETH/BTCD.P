@@ -92,8 +92,8 @@ export default async function handler(req: Request): Promise<Response> {
         if (!recent.length && oracle) {
           // Pick RPC by chain
           const rpc = chain === 'base'
-            ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC) || '')
-            : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC) || '')
+            ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC) || '')
+            : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL) || '')
           if (rpc) {
             // Helpers
             const rpcCall = async (method: string, params: any[]) => {

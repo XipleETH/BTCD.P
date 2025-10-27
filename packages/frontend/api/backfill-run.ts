@@ -16,8 +16,8 @@ export default async function handler(req: Request): Promise<Response> {
     const lookback = searchParams.has('lookback') ? Number(searchParams.get('lookback')) : NaN
 
     const rpc = chain === 'base'
-      ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC) || '')
-      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC) || '')
+      ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC) || '')
+      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL) || '')
     if (!rpc) return json({ ok: false, error: 'rpc not configured' })
 
     const rpcCall = async (method: string, params: any[]) => {

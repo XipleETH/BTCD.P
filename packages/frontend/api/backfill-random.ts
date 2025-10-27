@@ -16,8 +16,8 @@ export default async function handler(req: Request): Promise<Response> {
     const lookbackBlocks = body?.lookbackBlocks !== undefined ? Number(body?.lookbackBlocks) : NaN
 
     const rpc = chain === 'base'
-      ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC) || '')
-      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL) || '')
+      ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC || process.env.VITE_BASE_RPC || process.env.VITE_BASE_MAINNET_RPC) || '')
+      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL || process.env.VITE_BASE_SEPOLIA_RPC) || '')
     if (!rpc) return json({ error: 'rpc not configured' }, 500)
 
     const rpcCall = async (method: string, params: any[]) => {

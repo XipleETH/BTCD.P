@@ -15,9 +15,10 @@ export default async function handler(req: Request): Promise<Response> {
     let toBlock = body?.toBlock !== undefined ? Number(body?.toBlock) : NaN
     const lookbackBlocks = body?.lookbackBlocks !== undefined ? Number(body?.lookbackBlocks) : NaN
 
-    const rpc = chain === 'base'
+    const rpcOverride = String((body?.rpc || '')).trim()
+    const rpc = rpcOverride || (chain === 'base'
       ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC || process.env.VITE_BASE_RPC || process.env.VITE_BASE_MAINNET_RPC) || '')
-      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL || process.env.VITE_BASE_SEPOLIA_RPC) || '')
+      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL || process.env.VITE_BASE_SEPOLIA_RPC) || ''))
     if (!rpc) return json({ error: 'rpc not configured' }, 500)
 
     const rpcCall = async (method: string, params: any[]) => {
@@ -26,7 +27,11 @@ export default async function handler(req: Request): Promise<Response> {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
       })
-      if (!res.ok) throw new Error('rpc http ' + res.status)
+      if (!res.ok) {
+        let msg = 'rpc http ' + res.status
+        try { const t = await res.text(); if (t) msg += ' ' + t } catch {}
+        throw new Error(msg)
+      }
       const j = await res.json()
       if (j.error) throw new Error(j.error?.message || 'rpc error')
       return j.result

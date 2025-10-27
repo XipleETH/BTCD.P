@@ -15,9 +15,10 @@ export default async function handler(req: Request): Promise<Response> {
     let toBlock = searchParams.has('to') ? Number(searchParams.get('to')) : NaN
     const lookback = searchParams.has('lookback') ? Number(searchParams.get('lookback')) : NaN
 
-    const rpc = chain === 'base'
+    const rpcOverride = String(searchParams.get('rpc') || '').trim()
+    const rpc = rpcOverride || (chain === 'base'
       ? ((process.env.BASE_RPC_URL || process.env.BASE_MAINNET_RPC || process.env.BASE_MAINNET_RPC_URL || process.env.BASE_RPC || process.env.VITE_BASE_RPC || process.env.VITE_BASE_MAINNET_RPC) || '')
-      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL || process.env.VITE_BASE_SEPOLIA_RPC) || '')
+      : ((process.env.BASE_SEPOLIA_RPC_URL || process.env.BASE_SEPOLIA_RPC || process.env.BASE_SEPOLIA_MAINNET_RPC_URL || process.env.VITE_BASE_SEPOLIA_RPC) || ''))
     if (!rpc) return json({ ok: false, error: 'rpc not configured' })
 
     const rpcCall = async (method: string, params: any[]) => {
@@ -26,7 +27,11 @@ export default async function handler(req: Request): Promise<Response> {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
       })
-      if (!res.ok) throw new Error('rpc http ' + res.status)
+      if (!res.ok) {
+        let msg = 'rpc http ' + res.status
+        try { const t = await res.text(); if (t) msg += ' ' + t } catch {}
+        throw new Error(msg)
+      }
       const j = await res.json()
       if (j.error) throw new Error(j.error?.message || 'rpc error')
       return j.result
@@ -45,7 +50,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const topic0 = '0x' + '958c3ff76e4abbc5dbbfe67c5e4b61a3dfad24235b0d1e30a348f84692c6d6e9'
-    let logs: any[] = []
+  let logs: any[] = []
     try {
       logs = await rpcCall('eth_getLogs', [{ address: oracle, topics: [topic0], fromBlock: '0x' + fromBlock.toString(16), toBlock: '0x' + toBlock.toString(16) }]) as Array<any>
     } catch (e: any) {

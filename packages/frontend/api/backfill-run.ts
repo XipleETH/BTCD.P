@@ -49,7 +49,8 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ ok: false, error: 'invalid params', oracle, fromBlock, toBlock })
     }
 
-    const topic0 = '0x' + '958c3ff76e4abbc5dbbfe67c5e4b61a3dfad24235b0d1e30a348f84692c6d6e9'
+  // keccak256("PriceUpdated(int256,uint256)")
+  const topic0 = '0xdb6fb3cf4cc5fb760bcd63b958a53b2396776dff32c063188e864296541e76bd'
   let logs: any[] = []
     try {
       logs = await rpcCall('eth_getLogs', [{ address: oracle, topics: [topic0], fromBlock: '0x' + fromBlock.toString(16), toBlock: '0x' + toBlock.toString(16) }]) as Array<any>

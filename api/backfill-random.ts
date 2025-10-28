@@ -45,8 +45,9 @@ export default async function handler(req: Request): Promise<Response> {
       return json({ error: 'invalid params' }, 400)
     }
 
-    // Fetch logs for PriceUpdated(int256,uint256)
-    const topic0 = '0x' + keccak256('PriceUpdated(int256,uint256)')
+  // Fetch logs for PriceUpdated(int256,uint256)
+  // keccak256("PriceUpdated(int256,uint256)") = 0xdb6fb3cf4cc5fb760bcd63b958a53b2396776dff32c063188e864296541e76bd
+  const topic0 = '0xdb6fb3cf4cc5fb760bcd63b958a53b2396776dff32c063188e864296541e76bd'
     const logs = await rpcCall('eth_getLogs', [{ address: oracle, topics: [topic0], fromBlock: '0x' + fromBlock.toString(16), toBlock: '0x' + toBlock.toString(16) }]) as Array<any>
 
     const redis = Redis.fromEnv()
@@ -82,8 +83,7 @@ function json(body: any, status = 200): Response {
 }
 
 // Simple keccak256 of ASCII string (minimal for Edge) — avoids pulling full ethers
-function keccak256(s: string): string {
-  // Tiny keccak implementation is overkill; instead, precomputed topic is fine:
-  // keccak256("PriceUpdated(int256,uint256)") =
-  return '958c3ff76e4abbc5dbbfe67c5e4b61a3dfad24235b0d1e30a348f84692c6d6e9'
+function keccak256(_s: string): string {
+  // Deprecated: kept for backward compatibility; not used.
+  return 'db6fb3cf4cc5fb760bcd63b958a53b2396776dff32c063188e864296541e76bd'
 }

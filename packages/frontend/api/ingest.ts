@@ -50,10 +50,12 @@ export default async function handler(req: Request): Promise<Response> {
         await redis.ltrim(eventsKey, 0, eventsMax - 1)
       } catch {}
     }
-    // Trim to last 10000
+    // Trim ticks to a rolling window per market
+    // Align with root API: Random keeps deeper history to preserve older candles
+    const keep = market === 'random' ? 200_000 : 10_000
     const len = await redis.zcard(ticksKey)
-    if ((len || 0) > 11000) {
-      await redis.zremrangebyrank(ticksKey, 0, (len! - 10000 - 1))
+    if ((len || 0) > keep + Math.floor(keep * 0.1)) {
+      await redis.zremrangebyrank(ticksKey, 0, (len! - keep - 1))
     }
     return resp(200, { ok: true })
   } catch (e: any) {

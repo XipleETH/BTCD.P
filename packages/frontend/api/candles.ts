@@ -57,10 +57,10 @@ export default async function handler(req: Request): Promise<Response> {
       }
     } else {
       // Default: use ticks ZSET (absolute index/price)
-      const ticksKey = `btcd:ticks:${chain}:${market}`
-      // Random ticks arrive ~every 7s; fetch deeper history so old candles don't disappear.
-      // Keep others at a lighter window to reduce payload.
-      const N = market === 'random' ? 120000 : 10000
+  const ticksKey = `btcd:ticks:${chain}:${market}`
+  // Random ticks arrive ~every 7s; fetch deeper history so old candles don't disappear.
+  // Bump significantly so recovered history from backfill is included; others stay light.
+  const N = market === 'random' ? 300000 : 10000
       const arr = await redis.zrange<[string | number]>(ticksKey, -N, -1, { withScores: true })
       for (let i = 0; i < arr.length; i += 2) {
         const member = arr[i] as string
